@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         WME getting info from 2GIS
-// @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
+// @name         WME Get Address POI
+// @namespace    https://github.com/WazeRus/WME-Get-Address-POI
 // @version      0.1.6.11
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
@@ -320,9 +320,7 @@ function __ModityAddressYM()
             // удаляем пробелы
             houseNumber=houseNumber.replace(/\s+/g, '');
 			// коррекция букв в номерах домов
-			houseNumber=houseNumber.toLowerCase();
-			if (houseNumber.indexOf("б") > -1) // "Б" делаем большим
-				houseNumber=houseNumber.toUpperCase();
+            if (/^\d{1,6}[а-я]$/.test(houseNumber)) houseNumber = houseNumber.toUpperCase();
             // валидация
             
 

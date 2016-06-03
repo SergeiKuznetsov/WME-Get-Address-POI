@@ -3,7 +3,7 @@
 // @namespace    https://github.com/WazeRus/WME-Get-Address-POI
 // @version      0.1.6.11
 // @description  Information from 2gis in landmark edit panel
-// @author       coilamo & skirda
+// @author       coilamo & skirda & Griev0us
 // @include             https://*.waze.com/editor/*
 // @include             https://*.waze.com/*/editor/*
 // @include             https://*.waze.com/map-editor/*

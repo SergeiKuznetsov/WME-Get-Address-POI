@@ -338,12 +338,12 @@ function __ModityAddressYM()
 			}
 			else
 			{
-				if(!$('input[name="name"]').val())
+				if(!$('input[name="name"]').val() || (/^\d{1,6}[а-я]$/.test($('input[name="name"]').val())))
 					$('input[name="name"]').val(houseNumber).change();
 			}
 
 			// ставить номер дома в адрес
-			if(!$('input['+GetControlName('housenumber')+']').val() && !(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))
+			if(!(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))
 			{
 				$('input['+GetControlName('housenumber')+']').val(houseNumber).change();
 				mod=true;

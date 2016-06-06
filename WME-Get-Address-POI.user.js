@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME Get Address POI
 // @namespace    https://github.com/WazeRus/WME-Get-Address-POI
-// @version      0.1.6.11
+// @version      0.1.6.12
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda & Griev0us
 // @include             https://*.waze.com/editor/*
@@ -12,36 +12,31 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.6.11';
+var WME_2gis_version = '0.1.6.12';
 
 function wme_2gis() {
     console.log('Starting wme_2gis');
-
     if (typeof Waze === "undefined")
 	{
 		setTimeout(wme_2gis,500);
-        console.log('wme_2gis 1');
 		return;
 	}
 	if (typeof Waze.selectionManager === "undefined")
 	{
 		setTimeout(wme_2gis,500);
-        console.log('wme_2gis 2');
 		return;
 	}
 	if (typeof Waze.model === "undefined")
 	{
 		setTimeout(wme_2gis,500);
-        console.log('wme_2gis 3');
 		return;
 	}
 
 	try {
-        console.log('wme_2gis 4');
 		Waze.selectionManager.events.register("selectionchanged", null, wme_2gis_InserHTML);
 	}
 	catch (err) {
-        console.log('wme_2gis 5');
+        console.log('wme_2gis error');
 	}
 }
 
@@ -344,6 +339,11 @@ function __ModityAddressYM()
 				if(!namePOI.val() || (/^\d{1,6}[а-я]$/.test(namePOI.val())))
 					namePOI.val(houseNumber).change();
 			}
+            
+            //ставим лок
+            var userRank = Waze.loginManager.user.rank;
+            if($('select[name="lockRank"]').val() !== userRank)
+                $('select[name="lockRank"]').val(userRank).change();
 
 			// ставить номер дома в адрес
 			if(!(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))

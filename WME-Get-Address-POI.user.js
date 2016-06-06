@@ -323,23 +323,26 @@ function __ModityAddressYM()
             if (/^\d{1,6}[а-я]$/.test(houseNumber)) houseNumber = houseNumber.toUpperCase();
             // валидация
             
+            var namePOI = $('input[name="name"]');
+            var houseName = (namePOI.val())?namePOI.val():"";
+            namePOI.val(houseName.replace(/№\s*(\d)/, '№ $1')).change();
 
 			// выносим номер дома в название (если пусто)
-			if($('input[name="name"]').length > 1)
+			if(namePOI.length > 1)
 			{
-				for(var ii=0; ii < $('input[name="name"]').length; ++ii)
+				for(var ii=0; ii < namePOI.length; ++ii)
 				{
-					if (typeof ($($('input[name="name"]')[ii]).attr("id")) === "undefined" && !$($('input[name="name"]')[ii]).val())
+					if (typeof ($(namePOI[ii]).attr("id")) === "undefined" && !$(namePOI[ii]).val())
 					{
-						$($('input[name="name"]')[ii]).val(houseNumber).change();
+						$(namePOI[ii]).val(houseNumber).change();
 						break;
 					}
 				}
 			}
 			else
 			{
-				if(!$('input[name="name"]').val() || (/^\d{1,6}[а-я]$/.test($('input[name="name"]').val())))
-					$('input[name="name"]').val(houseNumber).change();
+				if(!namePOI.val() || (/^\d{1,6}[а-я]$/.test(namePOI.val())))
+					namePOI.val(houseNumber).change();
 			}
 
 			// ставить номер дома в адрес

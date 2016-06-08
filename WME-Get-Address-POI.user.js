@@ -342,7 +342,7 @@ function __ModityAddressYM()
             
             //ставим лок
             var userRank = Waze.loginManager.user.rank;
-            if($('select[name="lockRank"]').val() !== userRank)
+            if($('select[name="lockRank"]').val() < userRank)
                 $('select[name="lockRank"]').val(userRank).change();
 
 			// ставить номер дома в адрес

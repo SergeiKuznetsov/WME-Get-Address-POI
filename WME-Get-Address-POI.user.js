@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.6.12
+// @version      0.1.7.2
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include             https://*.waze.com/editor/*
@@ -12,11 +12,212 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.6.12';
+var WME_2gis_version = '0.1.7.2';
+var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
+var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
+var wazefeatureEditorLandmark = require("Waze/Presenter/FeatureEditor/Landmark");
+var wazeActionUpdateFeatureAddress = require("Waze/Action/UpdateFeatureAddress");
+var wazeActionUpdateObject = require("Waze/Action/UpdateObject");
+
+var wme2GIS_debug=false;
+var wme2GIS_UserRank=-1;
+var wme2GIS_NavigationPoint=0; // размещать точки-пои рандомно, недалеко от точки входа
+var wme2GIS_DefCategory="PROFESSIONAL_AND_PUBLIC";
+
+//Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point
+
+// для замены фраз в name на наши фразы
+//var wme2Gis_replacement = {};
+var wme2Gis_replacement0 = {
+    ', ОГУП':'',
+    ', ООО':'',
+    ', АО':'',
+    ', ПАО':'',
+    'сеть мебельных салонов':'мебельный салон',
+    'сеть фирменных магазинов':'фирменный магазин',
+    'сеть ювелирных магазинов':'ювелирный магазин',
+    'сеть обувных салонов':'обувной салон',
+    'сеть сервисных центров':'сервисный центр',
+    'сеть супермаркетов':'супермаркет',
+    'сеть универсамов':'универсам',
+    'сеть салонов':'салон',
+    'сеть магазинов':'магазин',
+    'сеть аптек':'аптека',
+    'сеть обувных магазинов':'обувной магазин',
+};
+
+// для сопоставления рубрикаторов 2гис и категорий WME
+var wme2Gis_categories = {};
+var wme2Gis_categories0 = {
+    fitnes_kluby:"GYM_FITNESS",
+    biblioteki:"LIBRARY",
+    pochtovye_otdeleniya:"POST_OFFICE",
+    izgotovlenie_mebeli_pod_zakaz:"FURNITURE_HOME_STORE",
+    korpusnaya_mebel:"FURNITURE_HOME_STORE",
+    detskaya_mebel:"FURNITURE_HOME_STORE",
+    matrasy:"FURNITURE_HOME_STORE",
+    mnogoprofilnye_medicinskie_centry:"HOSPITAL_MEDICAL_CARE",
+    diagnosticheskie_centry:"HOSPITAL_MEDICAL_CARE",
+    uslugi_ginekologa:"HOSPITAL_MEDICAL_CARE",
+    uslugi_urologa_androloga:"HOSPITAL_MEDICAL_CARE",
+    uslugi_nevrologa:"HOSPITAL_MEDICAL_CARE",
+    uslugi_kardiologa:"HOSPITAL_MEDICAL_CARE",
+    uslugi_gastroehnterologa:"HOSPITAL_MEDICAL_CARE",
+    medicinskie_laboratorii:"HOSPITAL_MEDICAL_CARE",
+    uslugi_terapevta:"HOSPITAL_MEDICAL_CARE",
+    //centry_rannego_razvitiya_detejj:"",
+    shkoly:"SCHOOL",
+    chastnye_detskie_sady:"KINDERGARDEN",
+    detskie_sady:"KINDERGARDEN",
+    cvety:"FLOWERS",
+    dostavka_cvetov:"FLOWERS",
+    postelnye_prinadlezhnosti_tekstil_dlya_doma:"FURNITURE_HOME_STORE",
+    stomatologicheskie_centry:"HOSPITAL_MEDICAL_CARE",
+    stomatologicheskie_polikliniki:"HOSPITAL_MEDICAL_CARE",
+    khozyajjstvennye_tovary:"HARDWARE_STORE",
+    detskaya_odezhda:"TOY_STORE",
+    pozharnaya_okhrana:"FIRE_DEPARTMENT",
+    spravochno_informacionnye_uslugi:"INFORMATION_POINT",
+    likvidaciya_nefterazlivov_gazoneftevodoproyavlenijj:"FACTORY_INDUSTRIAL",
+    sluzhby_avarijjnykh_komissarov:"POLICE_STATION",
+    telefony_doveriya:"INFORMATION_POINT",
+    skoraya_medicinskaya_pomoshh:"HOSPITAL_MEDICAL_CARE",
+    avtozapravochnye_stancii_azs:"GAS_STATION",
+    omvd_umvd_gumvd_mvd:"POLICE_STATION",
+    otdeleniya_policii:"POLICE_STATION",
+    sluzhby_sudebnykh_pristavov:"COURTHOUSE",
+    prokuratura:"COURTHOUSE",
+    gibdd:"POLICE_STATION",
+    sudy:"COURTHOUSE",
+    kafe:"CAFE",
+    teatry:"THEATER",
+    aehroporty:"AIRPORT",
+    oformlenie_viz:"EMBASSY_CONSULATE",
+    bary:"BAR",
+    optika:"PHARMACY",
+    studii_zagara:"PERSONAL_CARE",
+    yuvelirnye_izdeliya:"JEWELRY",
+    apteki:"PHARMACY",
+    sportivnyjj_inventar:"SPORTING_GOODS",
+    sportivnaya_odezhda_obuv:"SPORTING_GOODS",
+    velosipedy:"SPORTING_GOODS",
+    supermarkety:"SUPERMARKET_GROCERY",
+    zhenskaya_odezhda:"FASHION_AND_CLOTHING",
+    muzhskaya_odezhda:"FASHION_AND_CLOTHING",
+    fresh_bary_tochki_bezalkogolnykh_koktejjlejj_goryachikh_napitkov:"CAFE",
+    torgovye_centry_universalnye_magaziny:"SHOPPING_CENTER",
+    aksessuary_k_mobilnym_telefonam:"ELECTRONICS",
+    mobilnye_telefony:"ELECTRONICS",
+    remont_mobilnykh_ustrojjstv_svyazi:"ELECTRONICS",
+    obuvnye_magaziny:"FASHION_AND_CLOTHING",
+    sumki_kozhgalantereya:"FASHION_AND_CLOTHING",
+    bizhuteriya:"FASHION_AND_CLOTHING",
+    igrushki:"TOY_STORE",
+    tovary_dlya_novorozhdjonnykh:"TOY_STORE",
+    detskaya_obuv:"TOY_STORE",
+    restorany:"RESTAURANT",
+    knigi:"BOOKSTORE",
+    krepjozhnye_izdeliya:"FURNITURE_HOME_STORE",
+    sushi_bary_restorany:"BAR",
+    lakokrasochnye_materialy:"FURNITURE_HOME_STORE",
+    oboi:"FURNITURE_HOME_STORE",
+    bankomaty:"ATM",
+    santekhnika_sanfayans:"FURNITURE_HOME_STORE",
+    mebel_dlya_vannykh_komnat:"FURNITURE_HOME_STORE",
+    sistemy_otopleniya_vodosnabzheniya_kanalizacii:"FURNITURE_HOME_STORE",
+    //dizajjn_intererov:"",
+    fototovary:"PHOTOGRAPHY",
+    audiotekhnika_videotekhnika:"ELECTRONICS",
+    //ingredienty_gotovaya_produkciya_yaponskojj_kukhni:"",
+    //dostavka_gotovykh_blyud:"",
+    kafe_konditerskie_kofejjni:"CAFE",
+    detskie_igrovye_zaly_igroteki:"GAME_CLUB",
+    kafe_restorany_bystrogo_pitaniya:"FAST_FOOD",
+    prodovolstvennye_magaziny:"MARKET",
+    parikmakherskie:"PERSONAL_CARE",
+    kancelyarskie_tovary_uchebnye_prinadlezhnosti:"MARKET",
+    kadastrovye_raboty_tekhnicheskaya_inventarizaciya_uchet:"GOVERNMENT",
+    geodezicheskie_raboty:"GOVERNMENT",
+    soglasovanie_pereplanirovok:"GOVERNMENT",
+    dosug_razvlecheniya_obshhestvennoe_pitanie:"CULTURE_AND_ENTERTAINEMENT",
+    //medicina_zdorove_krasota:"",
+    //avarijjnye_spravochnye_ehkstrennye_sluzhby:"",
+    avtoservis_avtotovary:"CAR_SERVICES",
+    gorod_vlast:"GOVERNMENT",
+    internet_svyaz_informacionnye_tekhnologii:"ELECTRONICS",
+    //kommunalnye_bytovye_ritualnye_uslugi:"",
+    kompyutery_bytovaya_tekhnika_ofisnaya_tekhnika:"ELECTRONICS",
+    kultura_iskusstvo_religiya:"ARTS_AND_CRAFTS",
+    //mebel_materialy_furnitura:"",
+    //metally_toplivo_khimiya:"",
+    oborudovanie_instrument:"",
+    //obrazovanie_rabota_karera:"",
+    odezhda_obuv:"FASHION_AND_CLOTHING",
+    //okhrana_bezopasnost:"",
+    //produkty_pitaniya_napitki:"",
+    //reklama_poligrafiya_smi:"",
+    sport_otdykh_turizm:"SPORTS_COURT",
+    stroitelnye_otdelochnye_materialy:"HARDWARE_STORE",
+    stroitelstvo_nedvizhimost_remont:"HARDWARE_STORE",
+    tekstil_predmety_interera:"FURNITURE_HOME_STORE",
+    tovary_dlya_zhivotnykh_veterinariya:"PET_STORE_VETERINARIAN_SERVICES",
+    //torgovye_kompleksy_specmagaziny:"",
+    //transport_gruzoperevozki:"",
+    //khoztovary_kancelyariya_upakovka:"",
+    ehlektronika_ehlektrotekhnika:"ELECTRONICS",
+    yuridicheskie_finansovye_biznes_uslugi:"BANK_FINANCIAL",
+};
+
+
+function cloneConfig(obj)
+{
+	if (null == obj || "object" != typeof obj) return obj;
+	var copy = obj.constructor();
+	for (var attr in obj)
+	{
+    	if (obj.hasOwnProperty(attr))
+    	{
+    		copy[attr] = cloneConfig(obj[attr]);
+		}
+	}
+	return copy;
+}
+
+function CreateID()
+{
+	return 'WME-2Gis-' + WME_2gis_version.replace(/\./g,"-");
+}
+
+function PtInPoly(x, y, components)
+{
+	npol = components.length;
+	jj = npol - 1;
+	var c = 0;
+	for (var ii = 0; ii < npol;ii++)
+	{
+		if ((((components[ii].y<=y) && (y<components[jj].y)) || ((components[jj].y<=y) && (y<components[ii].y))) &&
+			(x > (components[jj].x - components[ii].x) * (y - components[ii].y) / (components[jj].y - components[ii].y) + components[ii].x))
+		{
+			c = !c;
+		}
+		jj = ii;
+	}
+	return c;
+}
+
+function IsJsonString(str) {
+	try {
+		JSON.parse(str);
+	} catch (e) {
+		return false;
+	}
+	return true;
+}
+
 
 function wme_2gis() {
-    console.log('Starting wme_2gis');
-    if (typeof Waze === "undefined")
+	console.log('Starting wme_2gis');
+	if (typeof Waze === "undefined")
 	{
 		setTimeout(wme_2gis,500);
 		return;
@@ -36,198 +237,274 @@ function wme_2gis() {
 		Waze.selectionManager.events.register("selectionchanged", null, wme_2gis_InserHTML);
 	}
 	catch (err) {
-        console.log('wme_2gis error');
+		console.log('wme_2gis error');
 	}
+
+	var wme2GIS_debug0=localStorage.getItem("wme2GIS_debug");
+	if(wme2GIS_debug0 && (wme2GIS_debug0 === "true" || wme2GIS_debug0 === "1"))
+		wme2GIS_debug=true;
+
+	var wme2GIS_NavigationPoint0=localStorage.getItem("wme2GIS_NavigationPoint");
+	if(wme2GIS_NavigationPoint0 && !isNaN(parseInt(wme2GIS_NavigationPoint0)))
+		wme2GIS_NavigationPoint=parseInt(wme2GIS_NavigationPoint0);
+	else
+		wme2GIS_NavigationPoint=0;
+
+
+	var wme2GIS_UserRank0=localStorage.getItem("wme2GIS_UserRank");
+	if(wme2GIS_UserRank0 && !isNaN(parseInt(wme2GIS_UserRank0)))
+		wme2GIS_UserRank=parseInt(wme2GIS_UserRank0);
+	else
+		wme2GIS_UserRank=Waze.loginManager.user.rank;
+
+	var wme2GIS_DefCategory0=localStorage.getItem("wme2GIS_DefCategory");
+	if(wme2GIS_DefCategory0 && wme2GIS_UserRank0.length>0)
+	{
+		if(I18n.translations[I18n.locale].venues.categories[wme2GIS_DefCategory])
+			wme2GIS_DefCategory=wme2GIS_DefCategory0;
+	}
+
+	var wme2Gis_categories00=localStorage.getItem("wme2GIS_Categories");
+	if (wme2Gis_categories00 && IsJsonString(wme2Gis_categories00))
+	{
+		wme2Gis_categories = cloneConfig(JSON.parse(wme2Gis_categories00));
+	}
+	else
+	{
+		wme2Gis_categories = cloneConfig(wme2Gis_categories0);
+	}
+
+	setTimeout(wme_2gis_initBindPoi, 500);
+	setTimeout(Wme2Gis_InitConfig, 500);
 }
 
 
 function wme_2gis_InserHTML() {
 
-    if (Waze.selectionManager.selectedItems.length > 0 && Waze.selectionManager.selectedItems[0].model.type === "venue") {
-        console.log('wme_2gis_InserHTML');
+	if (Waze.selectionManager.selectedItems.length > 0 && Waze.selectionManager.selectedItems[0].model.type === "venue") {
+		if (wme2GIS_debug) console.log('wme_2gis_InserHTML');
 
-        $('#landmark-edit-general').prepend(
-            '<div class="form-group"> \
-                 <label class="control-label">External POI (version ' + WME_2gis_version + ')</label> \
-                     <div class="controls"> \
-                         <div id="2gis"></div><div id="gm"></div><div id="ym"></div><div id="osm"></div> \
-                     </div> \
-                 </div> \
-             </div>'
-        );
-        var div2gis = document.getElementById('2gis');
-        var divGm = document.getElementById('gm');
-        var divYm = document.getElementById('ym');
-        var divOsm = document.getElementById('osm');
+		$('#landmark-edit-general').prepend(
+			'<div class="form-group"> \
+<label class="control-label">External POI (version ' + WME_2gis_version + ')</label> \
+<div class="controls"> \
+<div id="2gis"></div><div id="gm"></div><div id="ym"></div><div id="osm"></div> \
+</div> \
+</div> \
+</div>'
+		);
+		var div2gis = document.getElementById('2gis');
+		var divGm = document.getElementById('gm');
+		var divYm = document.getElementById('ym');
+		var divOsm = document.getElementById('osm');
 
-        //getting lon/lat selected point
-        var poi_id=Waze.selectionManager.selectedItems[0].model.attributes.id;
-        console.log(Waze.model.venues.get(poi_id).geometry);
-        var x,y;
-        if(Waze.model.venues.get(poi_id).geometry.x !== undefined && Waze.model.venues.get(poi_id).geometry.y !== undefined) {
-            x = Waze.model.venues.get(poi_id).geometry.x;
-            y = Waze.model.venues.get(poi_id).geometry.y;
-        }else{
-            x = (Waze.model.venues.get(poi_id).geometry.bounds.left + Waze.model.venues.get(poi_id).geometry.bounds.right) / 2;
-            y = (Waze.model.venues.get(poi_id).geometry.bounds.top + Waze.model.venues.get(poi_id).geometry.bounds.bottom) / 2;
-        }
-        var poiPos=new OpenLayers.LonLat(x,y);
-        poiPos.transform(new OpenLayers.Projection("EPSG:900913"),new OpenLayers.Projection("EPSG:4326"));
-        console.log(poiPos.lat, poiPos.lon);
+		//getting lon/lat selected point
+		var poi_id=Waze.selectionManager.selectedItems[0].model.attributes.id;
+		//if (wme2GIS_debug) console.log(Waze.model.venues.get(poi_id).geometry);
 
-        //2GIS
-        var url = 'https://catalog.api.2gis.ru/2.0/geo/search';
-        var data = {
-            "point": poiPos.lon + ',' + poiPos.lat,
-            "format": "json",
-            "key": "rubnkm7490"
-        };
+		// координаты всегда берём от мыши
+		var mc=document.getElementsByClassName('WazeControlMousePosition')[0].lastChild.innerHTML.split(' ');
+		var x=mc[0];
+		var y=mc[1];
+		var poiPos=new OpenLayers.LonLat(x,y);
+		if (wme2GIS_debug) console.log("https://www.waze.com/ru/editor/?env=row&lon="+poiPos.lon+"&lat="+poiPos.lat+"&zoom=7&marker=yes");
 
-        $.ajax({
-            dataType: "json",
-            cache: false,
-            url: url,
-            data: data,
-            error: function() {
-            },
-            success: function(json) {
-                var script2   = document.createElement('script');
-                script2.type  = "text/javascript";
-                var s = document.getElementsByTagName('head')[0].appendChild(script2);
-                s.innerHTML='var map; DG.then(function () {map = DG.map(\'map_2gis\', {center: [' + poiPos.lat + ',' + poiPos.lon + '],zoom: 17,fullscreenControl: false,zoomControl: false});});';
-                
-                div2gis.innerHTML='2GIS: ' + json.result.items[0].full_name + '<br/>' +
-                '<div id="map_2gis" style="width:275px; height:275px"></div>';
-            }
-        });
+		//2GIS
+		var url = 'https://catalog.api.2gis.ru/2.0/geo/search';
+		var data = {
+			"point": poiPos.lon + ',' + poiPos.lat,
+			"format": "json",
+			"fields": "items.links",
+			"key": "rubnkm7490"
+		};
 
-        //google maps
-        var gm_url = 'https://maps.googleapis.com/maps/api/geocode/json';
-        var gm_data = {
-            "latlng": poiPos.lat + ',' + poiPos.lon
-        };
+		$.ajax({
+			dataType: "json",
+			cache: false,
+			url: url,
+			data: data,
+			error: function() {
+			},
+			success: function(json) {
+				var script2   = document.createElement('script');
+				script2.type  = "text/javascript";
+				var s = document.getElementsByTagName('head')[0].appendChild(script2);
+				s.innerHTML='var map; DG.then(function () {map = DG.map(\'map_2gis\', {center: [' + poiPos.lat + ',' + poiPos.lon + '],zoom: 17,fullscreenControl: false,zoomControl: false});});';
 
-        $.ajax({
-            dataType: "json",
-            cache: false,
-            url: gm_url,
-            data: gm_data,
-            error: function() {
-            },
-            success: function(json) {
-               var gm_obj = json.results[0].address_components;
-               if(gm_obj[0].long_name !== 'Unnamed Road') {
-                   divGm.innerHTML='GM: <a href="#" id="gm_storeaddress" title="Заполнить адрес">'+gm_obj[0].long_name + ', ' + gm_obj[1].long_name+'</a>';
-                   divGm.onclick =  __ModityAddressYM;
-                   if(gm_obj[2].long_name !== null)
-                       document.getElementById('gm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
-                   if(gm_obj[1].long_name !== null)
-                       document.getElementById('gm_storeaddress').setAttribute('streetName', gm_obj[1].long_name);
-                   if(gm_obj[0].long_name !== null)
-                       document.getElementById('gm_storeaddress').setAttribute('houseNumber', gm_obj[0].long_name);
-               }
-           }
-        });
+				div2gis.innerHTML = '2GIS: ' + json.result.items[0].full_name + '<br/>' +
+					'<div id="map_2gis" style="width:275px; height:275px"></div>';
 
-        //yandex maps
-        var ym_url = 'https://geocode-maps.yandex.ru/1.x/';
-        var ym_data = {
-            "geocode": poiPos.lon + ',' + poiPos.lat,
-            "format":"json"
-        };
+				// у точки не отображаем организайии, если она в пределах родителя
+				var ispoint=Waze.selectionManager.hasSelectedItems() && Waze.selectionManager.selectedItems[0].model.attributes.geometry.id.indexOf(".Point") >= 0;
+				var found=false;
+				if(ispoint)
+				{
+					for(var i in Waze.model.venues.objects) // ищем родителя
+					{
+						var v=Waze.model.venues.get(i);
+						if (v.attributes.geometry.id.indexOf(".Point") < 0) // исключаем точки
+						{
+							var poiCoord=new OpenLayers.LonLat(poiPos.lon,poiPos.lat);
+							poiCoord.transform(new OpenLayers.Projection("EPSG:4326"),new OpenLayers.Projection("EPSG:900913"));
+							if (PtInPoly(poiCoord.lon,poiCoord.lat,v.attributes.geometry.components[0].components))
+							{
+								found=true;
+								break;
+							}
+						}
+						if(found)
+							break;
+					}
+				}
+				if (wme2GIS_debug) console.log("wme_2gis_InserHTML(): found parent="+found);
+				if (!found)
+				{
+					if(json.result.items.length > 0)
+					{
+						if(json.result.items[0].links && typeof (json.result.items[0].links) === "object")
+						{
+							if(typeof (json.result.items[0].links.branches) !== "undefined")
+							{
+								div2gis.innerHTML += '<div id="poi_2gis" style="width:275px;"><a href="#" id="getListPoi">Организации в здании</a></div>';
+								document.getElementById('getListPoi').onclick = getListPOI;
+								document.getElementById('getListPoi').setAttribute('building_id', json.result.items[0].id);
+								document.getElementById('getListPoi').setAttribute('lat', poiPos.lat);
+								document.getElementById('getListPoi').setAttribute('lon', poiPos.lon);
+                                document.getElementById('getListPoi').setAttribute('page', 1);
+							}
+						}
+					}
+				}
+			}
+		});
 
-        $.ajax({
-            dataType: "json",
-            cache: false,
-            url: ym_url,
-            data: ym_data,
-            error: function() {
-            },
-            success: function(json) {
-                
-                function findSomething(object, name) {
-                    console.log(object);
-                    if (name in object) return object[name];
-                    for (key in object) {
-                        if ((typeof (object[key])) == 'object') {
-                            var t = findSomething(object[key], name);
-                            if (t) return t;
-                        }
-                    }
-                    return null;
-                }
+		//google maps
+		var gm_url = 'https://maps.googleapis.com/maps/api/geocode/json';
+		var gm_data = {
+			"latlng": poiPos.lat + ',' + poiPos.lon
+		};
 
-                var ym_obj = json.response.GeoObjectCollection.featureMember[0].GeoObject;
-                var cityName = findSomething(ym_obj, "LocalityName");
-                var streetName;
-                if(findSomething(ym_obj, "ThoroughfareName") !== null) {
-                    streetName = findSomething(ym_obj, "ThoroughfareName");
-                } else if(findSomething(ym_obj, "DependentLocalityName") !== null) {
-                    streetName = findSomething(ym_obj, "DependentLocalityName");
-                }
-                var houseNumber = findSomething(ym_obj, "PremiseNumber");
-                
-                if(houseNumber !== undefined && houseNumber !== null) {
-                    divYm.innerHTML='YM: <a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>';
-                    divYm.onclick =  __ModityAddressYM;
+		$.ajax({
+			dataType: "json",
+			cache: false,
+			url: gm_url,
+			data: gm_data,
+			error: function() {
+			},
+			success: function(json) {
+				var gm_obj = json.results[0].address_components;
+				if(gm_obj[0].long_name !== 'Unnamed Road') {
+					divGm.innerHTML='GM: <a href="#" id="gm_storeaddress" title="Заполнить адрес">'+gm_obj[0].long_name + ', ' + gm_obj[1].long_name+'</a>';
+					divGm.onclick =  __ModityAddressYM;
+					if(gm_obj[2].long_name !== null)
+						document.getElementById('gm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
+					if(gm_obj[1].long_name !== null)
+						document.getElementById('gm_storeaddress').setAttribute('streetName', gm_obj[1].long_name);
+					if(gm_obj[0].long_name !== null)
+						document.getElementById('gm_storeaddress').setAttribute('houseNumber', gm_obj[0].long_name);
+				}
+			}
+		});
 
-                    var ym_locality = findSomething(ym_obj, "LocalityName");
-                    if(typeof(ym_locality.DependentLocality) !== undefined) ym_locality = ym_locality.DependentLocality;
+		//yandex maps
+		var ym_url = 'https://geocode-maps.yandex.ru/1.x/';
+		var ym_data = {
+			"geocode": poiPos.lon + ',' + poiPos.lat,
+			"format":"json"
+		};
 
-                    if(cityName !== null)
-                        document.getElementById('ym_storeaddress').setAttribute('cityName', cityName);
-                    if(streetName !== null)
-                        document.getElementById('ym_storeaddress').setAttribute('streetName', streetName);
-                    if(houseNumber !== null)
-                        document.getElementById('ym_storeaddress').setAttribute('houseNumber', houseNumber);
-                }
-            }
-        });
-        
-        //OSM
-        var osm_url = 'https://nominatim.openstreetmap.org/reverse';
-        var osm_data = {
-            "lat": poiPos.lat,
-            "lon": poiPos.lon,
-            "zoom": 20,
-            "format": "json",
-            "addressdetails": 1,
-            "countrycodes":"ru",
-            "accept-language": "Ru_ru"
-        };
+		$.ajax({
+			dataType: "json",
+			cache: false,
+			url: ym_url,
+			data: ym_data,
+			error: function() {
+			},
+			success: function(json) {
 
-        $.ajax({
-            dataType: "json",
-            cache: false,
-            url: osm_url,
-            data: osm_data,
-            error: function() {
-            },
-            success: function(json) {
-               var osm_obj = json.address;
-               if(osm_obj.house_number !== undefined) {
-                   divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>';
-                   divOsm.onclick =  __ModityAddressYM;
-                   //document.getElementById('osm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
-                   document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
-                   document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
-               }
-           }
-        });
+				function findSomething(object, name) {
+					//if (wme2GIS_debug) console.log(object);
+					if (name in object) return object[name];
+					for (key in object) {
+						if ((typeof (object[key])) == 'object') {
+							var t = findSomething(object[key], name);
+							if (t) return t;
+						}
+					}
+					return null;
+				}
 
-    }
-    return;
+				var ym_obj = json.response.GeoObjectCollection.featureMember[0].GeoObject;
+				var cityName = findSomething(ym_obj, "LocalityName");
+				var streetName;
+				if(findSomething(ym_obj, "ThoroughfareName") !== null) {
+					streetName = findSomething(ym_obj, "ThoroughfareName");
+				} else if(findSomething(ym_obj, "DependentLocalityName") !== null) {
+					streetName = findSomething(ym_obj, "DependentLocalityName");
+				}
+				var houseNumber = findSomething(ym_obj, "PremiseNumber");
+
+				if(houseNumber !== undefined && houseNumber !== null) {
+					divYm.innerHTML='YM: <a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>';
+					divYm.onclick =  __ModityAddressYM;
+
+					var ym_locality = findSomething(ym_obj, "LocalityName");
+					if(typeof(ym_locality.DependentLocality) !== undefined) ym_locality = ym_locality.DependentLocality;
+
+					if(cityName !== null && document.getElementById('ym_storeaddress'))
+						document.getElementById('ym_storeaddress').setAttribute('cityName', cityName);
+					if(streetName !== null && document.getElementById('ym_storeaddress'))
+						document.getElementById('ym_storeaddress').setAttribute('streetName', streetName);
+					if(houseNumber !== null && document.getElementById('ym_storeaddress'))
+						document.getElementById('ym_storeaddress').setAttribute('houseNumber', houseNumber);
+				}
+			}
+		});
+
+		//OSM
+		var osm_url = 'https://nominatim.openstreetmap.org/reverse';
+		var osm_data = {
+			"lat": poiPos.lat,
+			"lon": poiPos.lon,
+			"zoom": 20,
+			"format": "json",
+			"addressdetails": 1,
+			"countrycodes":"ru",
+			"accept-language": "Ru_ru"
+		};
+
+		$.ajax({
+			dataType: "json",
+			cache: false,
+			url: osm_url,
+			data: osm_data,
+			error: function() {
+			},
+			success: function(json) {
+				var osm_obj = json.address;
+				if(osm_obj.house_number !== undefined) {
+					divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>';
+					divOsm.onclick =  __ModityAddressYM;
+					//document.getElementById('osm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
+					document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
+					document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
+				}
+			}
+		});
+
+	}
+	return;
 }
 
 function __ModityAddressYM()
 {
-    var cityName=this.children[0].getAttribute('cityname');
-    console.log(cityName);
-    var streetName=this.children[0].getAttribute('streetname');
-    console.log(streetName);
-    var houseNumber=this.children[0].getAttribute('housenumber');
-    console.log(houseNumber);
-    var mod=false;
+	var cityName=this.children[0].getAttribute('cityname');
+	if (wme2GIS_debug) console.log(cityName);
+	var streetName=this.children[0].getAttribute('streetname');
+	if (wme2GIS_debug) console.log(streetName);
+	var houseNumber=this.children[0].getAttribute('housenumber');
+	if (wme2GIS_debug) console.log(houseNumber);
+	var mod=false;
 
 	function GetControlName(id)
 	{
@@ -266,42 +543,42 @@ function __ModityAddressYM()
 		// ** обработка имени стрита **
 		if(streetName && streetName !== "")
 		{
-            
-            //блок по преобразованию имени стрита к нашему виду.
-            
-            var wmeStreetName;
-            var streets=[];
-            var i=0;
-            for(i in Waze.model.streets.objects)
-            {
-                console.log(Waze.model.streets.objects[i].name);
-                streets.push({"name": Waze.model.streets.objects[i].name});
-            }
 
-            console.log(streets);
-            var options = {
-                caseSensitive: false,
-                includeScore: false,
-                shouldSort: true,
-                tokenize: true,
-                threshold: 0.6,
-                location: 0,
-                distance: 100,
-                maxPatternLength: 32,
-                keys: ["name"]
-            };
-            var f = new Fuse(streets, options);
-            wmeStreetName = f.search(streetName);
-            console.log(wmeStreetName[0].name);
-            
+			//блок по преобразованию имени стрита к нашему виду.
+
+			var wmeStreetName;
+			var streets=[];
+			var i=0;
+			for(i in Waze.model.streets.objects)
+			{
+				if (wme2GIS_debug) console.log(Waze.model.streets.objects[i].name);
+				streets.push({"name": Waze.model.streets.objects[i].name});
+			}
+
+			if (wme2GIS_debug) console.log(streets);
+			var options = {
+				caseSensitive: false,
+				includeScore: false,
+				shouldSort: true,
+				tokenize: true,
+				threshold: 0.6,
+				location: 0,
+				distance: 100,
+				maxPatternLength: 32,
+				keys: ["name"]
+			};
+			var f = new Fuse(streets, options);
+			wmeStreetName = f.search(streetName);
+			if (wme2GIS_debug) console.log(wmeStreetName[0].name);
+
 			if($('input['+GetControlName('streetname')+']').val() !== wmeStreetName[0].name) {
-				
-                // если чекед ("без улицы") - сделать uncheck (разлочить строку ввода)
+
+				// если чекед ("без улицы") - сделать uncheck (разлочить строку ввода)
 				if ($(GetControlName('streetnamecheck'))[0].checked)
 					$(GetControlName('streetnamecheck')).click();
-                //если имя не пустое, сообщаем, что мы его меняем
-                if($('input['+GetControlName('streetname')+']').val().length)
-                    alert('Изменено название улицы. ' + $('input['+GetControlName('streetname')+']').val() + ' -> ' + wmeStreetName[0].name );;
+				//если имя не пустое, сообщаем, что мы его меняем
+				if($('input['+GetControlName('streetname')+']').val().length)
+					alert('Изменено название улицы. ' + $('input['+GetControlName('streetname')+']').val() + ' -> ' + wmeStreetName[0].name );;
 				// ставить имя стрита в адрес
 				$('input['+GetControlName('streetname')+']').val(wmeStreetName[0].name).change();
 				mod=true;
@@ -311,15 +588,15 @@ function __ModityAddressYM()
 		// ** обработка номера дома **
 		if(houseNumber && houseNumber !== "")
 		{
-            
-            // удаляем пробелы
-            houseNumber=houseNumber.replace(/\s+/g, '');
+
+			// удаляем пробелы
+			houseNumber=houseNumber.replace(/\s+/g, '');
 			// коррекция букв в номерах домов
 			houseNumber=houseNumber.toLowerCase();
 			if (houseNumber.indexOf("б") > -1) // "Б" делаем большим
 				houseNumber=houseNumber.toUpperCase();
-            // валидация
-            
+			// валидация
+
 
 			// выносим номер дома в название (если пусто)
 			if($('input[name="name"]').length > 1)
@@ -338,11 +615,12 @@ function __ModityAddressYM()
 				if(!$('input[name="name"]').val())
 					$('input[name="name"]').val(houseNumber).change();
 			}
-            
-            //ставим лок
-            var userRank = Waze.loginManager.user.rank;
-            if($('select[name="lockRank"]').val() !== userRank)
-                $('select[name="lockRank"]').val(userRank).change();
+
+			//ставим лок
+			if (wme2GIS_debug) console.log("__ModityAddressYM(): userRank="+wme2GIS_UserRank);
+
+			if($('select[name="lockRank"]').val() !== wme2GIS_UserRank)
+				$('select[name="lockRank"]').val(wme2GIS_UserRank).change();
 
 			// ставить номер дома в адрес
 			if(!$('input['+GetControlName('housenumber')+']').val() && !(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))
@@ -367,27 +645,451 @@ function __ModityAddressYM()
 				mod=true;
 			}
 		}
-		console.log(GetControlName('save'));
+		if (wme2GIS_debug) console.log(GetControlName('save'));
 		$('button['+(mod ?GetControlName('save'):GetControlName('cancel'))+']').click();
 	}, 60);
 
 }
 
-function wme_2gis_init() {
-    console.log('wme_2gis_init');
+function getListPOI(){
+    var building_id=this.getAttribute('building_id')
+	var lonc=this.getAttribute('lon');
+	var latc=this.getAttribute('lat');
+    var page=this.getAttribute('page');
+
+	var url = 'https://catalog.api.2gis.ru/2.0/catalog/branch/list';
+	var data = {
+		"building_id": building_id,
+		"fields": "items.point",
+		"page_size": 50,
+		"page": page,
+		"key": "rubnkm7490"
+	};
+
+	$.ajax({
+		dataType: "json",
+		cache: false,
+		url: url,
+		data: data,
+		error: function() {
+		},
+		success: function(json) {
+			if (wme2GIS_debug) console.dir(json)
+			if(json.meta.error === undefined) {
+                var total = parseInt(json.result.total);
+				var poi_list='';
+				for (var i = 0; i < total; i++) {
+					if(json.result.items[i] === undefined) break;
+                    if(localStorage.getItem("wme2GIS_id_" + json.result.items[i].id.split("_")[0]) === "1") poi_list+='<a href="#" style="padding-right:5px;" class="fa fa-check-square" poi="' + json.result.items[i].id.split("_")[0] + '"></a>';
+					poi_list = poi_list + (i+1+(page-1)*50) + '.'
+						+' <a href="#"'
+						+' class="create-poi"'
+						+' lon="' + json.result.items[i].point.lon + '"'+
+						+' lat="' + json.result.items[i].point.lat + '"'
+						+' poi_id="' + json.result.items[i].id + '"'
+						+' lonc="' + lonc + '"'
+						+' latc="' + latc + '"'
+						+'>' + json.result.items[i].name + '</a><br/>';
+				}
+				if(total > 50 && Math.floor(total/50) >= page)
+                    poi_list+='<a href="#" id="nextListPoi">Следующие</a><hr/>';
+                else
+                    poi_list+='<hr/>';
+                $("#poi_2gis").html(poi_list);
+                if(total > 50 && Math.floor(total/50) >= page) {
+                    document.getElementById('nextListPoi').onclick = getListPOI;
+                    document.getElementById('nextListPoi').setAttribute('building_id', building_id);
+                    document.getElementById('nextListPoi').setAttribute('lat', latc);
+                    document.getElementById('nextListPoi').setAttribute('lon', lonc);
+                    document.getElementById('nextListPoi').setAttribute('page', parseInt(page)+1);
+                }
+                $('.fa-check-square').click(function(){ 
+                    localStorage.setItem('wme2GIS_id_' + this.getAttribute('poi'), 0);
+                    console.log('wme2GIS_id_' + this.getAttribute('poi'));
+                    this.remove();
+                });
+			}else{
+				$("#poi_2gis").html(json.meta.error.message);
+			}
+
+			$('.create-poi').click(function(){
+				//if (wme2GIS_debug) console.log(this.getAttribute('name') + '/' + this.getAttribute('lon') + '/' + this.getAttribute('lat'));
+				var poiCoord=new OpenLayers.LonLat(this.getAttribute('lon'),this.getAttribute('lat'));
+				poiCoord.transform(new OpenLayers.Projection("EPSG:4326"),new OpenLayers.Projection("EPSG:900913"));
+				if (wme2GIS_debug) console.log('[' + poiCoord.lon + '/' + poiCoord.lat + '], [' + this.getAttribute('latc') + '/' + this.getAttribute('lonc') + ']');
+				createPOI({
+					x: poiCoord.lon,
+					y: poiCoord.lat,
+					poi_id: this.getAttribute('poi_id'),
+					lat: this.getAttribute('latc'),
+					lon: this.getAttribute('lonc')
+				});
+			});
+		}
+	});
+}
+
+
+function createPOI (poiobject) {
+	/*
+		poiobject:
+			x, y - координаты (2гис)
+			lat,lon - координаты клика мыши (WME)
+			poi_id - это уникальный идентификатор создаваемого ПОИ (2гис)
+	*/
+	var url = 'https://catalog.api.2gis.ru/2.0/catalog/branch/get';
+	var data = {
+		"id": poiobject.poi_id,
+		"format": "json",
+		"fields": "items.adm_div,items.region_id,items.reviews,items.point,items.links,items.name_ex,items.org,items.group,items.see_also,items.dates,items.external_content,items.flags,items.ads.options,items.email_for_sending.allowed,hash,search_attributes",
+		"key": "rubnkm7490"
+	};
+
+	$.ajax({
+		dataType: "json",
+		cache: false,
+		url: url,
+		data: data,
+		error: function() {
+		},
+		success: function(json) {
+			var json_poi = json.result.items[0];
+			var poi = new wazefeatureVectorLandmark();
+			var geometry = new OpenLayers.Geometry.Point();
+            var rnd_meter=10;
+
+			switch(wme2GIS_NavigationPoint)
+			{
+				case 0: // около точки входа (rnd_meter - в пределах скольки метров)
+					geometry.x=Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point.x+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*rnd_meter);
+					geometry.y=Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point.y+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*rnd_meter);
+					break;
+
+				case 1: // там, где кликнули мышкой
+					var poiPos=new OpenLayers.LonLat(poiobject.lon,poiobject.lat);
+					// здесь требуется преобразование координат
+					poiPos.transform(new OpenLayers.Projection("EPSG:4326"),new OpenLayers.Projection("EPSG:900913"));
+					geometry.x = poiPos.lon;
+					geometry.y = poiPos.lat;
+					break;
+
+				case 2: // рандомно, в пределах родиетльского ПОИ
+					while(1)
+					{
+						geometry.x = poiobject.x+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*100);
+						geometry.y = poiobject.y+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*100);
+						if (PtInPoly(geometry.x,geometry.y,Waze.selectionManager.selectedItems[0].model.attributes.geometry.components[0].components))
+							break;
+					}
+					break;
+				case 3: // около точки входа 2GIS
+                    var entrance_2gis = json_poi.links.entrances[0].geometry.points[0].replace(/.*\(([0-9\.]+) ([0-9\.]+)\)/,"$1 $2").split(" ");
+                    var entrancePos=new OpenLayers.LonLat(entrance_2gis[0], entrance_2gis[1]);
+					// здесь требуется преобразование координат
+					entrancePos.transform(new OpenLayers.Projection("EPSG:4326"),new OpenLayers.Projection("EPSG:900913"));
+					geometry.x=entrancePos.lon+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*rnd_meter);
+					geometry.y=entrancePos.lat+((Math.random()*10) & 1 ?+1:-1)*(Math.random()*rnd_meter);
+					break;
+			}
+
+			if (wme2GIS_debug) console.log("geometry="+JSON.stringify(geometry));
+			poi.geometry = geometry;
+			poi.attributes.categories=Waze.selectionManager.selectedItems[0].model.attributes.categories.clone();
+			poi.attributes.categories.length=0;
+			
+            if(json_poi.rubrics !== undefined && typeof wme2Gis_categories[json_poi.rubrics[0].alias] !== "undefined") { //ищем категорию в нашем массиве
+                poi.attributes.categories.push(wme2Gis_categories[json_poi.rubrics[0].alias]);
+                if (wme2GIS_debug) console.log('Subrubric found');
+            }
+            else if(json_poi.rubrics !== undefined && typeof wme2Gis_categories[rubricAlias=getRubricAlias(json_poi.rubrics[0].parent_id)] !== "undefined") { //ищем категорию родителя в нашем массиве
+                poi.attributes.categories.push(wme2Gis_categories[rubricAlias]);
+                if (wme2GIS_debug) console.log('Rubric found, ');
+            }
+            else {
+                poi.attributes.categories.push(wme2GIS_DefCategory);
+            }
+			if (wme2GIS_debug) console.dir(json_poi.rubrics);
+			if (wme2GIS_debug) console.log("json_poi.rubrics[0].alias="+json_poi.rubrics[0].alias);
+            var poi_name = json_poi.name;
+            for (var key in wme2Gis_replacement0) {
+                poi_name = poi_name.replace(new RegExp(key,'ig'), wme2Gis_replacement0[key]);
+                if (wme2GIS_debug) console.log("replace '"+key+"'=>'"+wme2Gis_replacement0[key]+"'");
+            }
+			poi.attributes.name = poi_name;
+
+			var address=Waze.selectionManager.selectedItems[0].model.getAddress().attributes;
+			/* var description=((typeof json_poi.name_ex.extension !== "undefined")?json_poi.name_ex.extension:"");
+			if(description.length > 0)
+				description+=', '
+            */
+			var description=json_poi.address_name;
+			description+=((typeof json_poi.address_comment !== "undefined")?", " + json_poi.address_comment:"");
+			poi.attributes.description=description;
+			poi.attributes.lockRank=wme2GIS_UserRank;
+			poi.attributes.houseNumber=address.houseNumber;
+			var poi_al=new wazeActionAddLandmark(poi);
+			Waze.model.actionManager.add(poi_al);
+			window.poi0=poi;	// для анализа :-)
+			window.poi1=poi_al; // для анализа :-)
+
+			// корректировка стрита - по другому пока никак :-(
+			var newAddressAtts={streetName: address.street.name, emptyStreet: false, cityName: address.city.name, emptyCity: false, stateID: address.state.id, countryID: address.country.id};
+			Waze.model.actionManager.add(new wazeActionUpdateFeatureAddress(poi, newAddressAtts, {streetIDField: 'streetID'} ));
+
+			// обеспечим автовыделение вновь созданного пои
+			Waze.selectionManager.select([poi_al.landmark]);
+			if (wme2GIS_debug) console.log(json_poi.rubrics);
+            // сохраним информацию о пои в локальное хранилище
+            localStorage.setItem("wme2GIS_id_" + json_poi.id, 1);
+		}
+	});
+
+}
+
+
+function getRubricAlias(rubric_id) {
+    var rubricAlias;
+    var url = 'https://catalog.api.2gis.ru/2.0/catalog/rubric/get';
+	var data = {
+		"id": rubric_id,
+		"key": "rubnkm7490"
+	};
+
+	$.ajax({
+		dataType: "json",
+		cache: false,
+        async: false,
+		url: url,
+		data: data,
+		error: function() {
+		},
+		success: function(json) {
+            if(json.result.items[0].parent_id === undefined) {
+                console.log(json.result.items[0].alias);
+                rubricAlias = json.result.items[0].alias;
+            }else{
+                console.log('trying getRubricAlias');
+                getRubricAlias(json.result.items[0].parent_id);
+            }
+		}
+	});
     
-    var script2gis   = document.createElement('script');
+    return rubricAlias;
+}
+
+
+//******************************************************
+function Wme2Gis_InitConfig()
+{
+	if (wme2GIS_debug) console.log("Wme2Gis_InitConfig(): "+document.getElementById(CreateID()));
+
+	if(!document.getElementById(CreateID()))
+	{
+		var srsCtrl = document.createElement('section');
+		srsCtrl.id = CreateID();
+
+	    var userTabs = document.getElementById('user-info');
+	    if (typeof userTabs !== "undefined")
+	    {
+    		var navTabs = document.getElementsByClassName('nav-tabs', userTabs)[0];
+    		if (typeof navTabs !== "undefined")
+    		{
+	    		var tabContent = document.getElementsByClassName('tab-content', userTabs)[0];
+	    		if (typeof tabContent !== "undefined")
+		    	{
+					newtab = document.createElement('li');
+					// fa ==> http://fontawesome.io/cheatsheet/
+					newtab.innerHTML = '<a href="#' + CreateID() + '" id="pwme2gis" data-toggle="tab"><span class="fa fa-map-marker"></span>&nbsp;2gis</a>';
+
+					navTabs.appendChild(newtab);
+
+					//srsCtrl.id = "sidepanel-???";
+					srsCtrl.className = "tab-pane";
+
+					var padding="padding:5px 9px";
+
+					// ------------------------------------------------------------
+					var srsCtrlinnerHTML = ''
+						+'<div class="side-panel-section">'
+						+'<h4>WME getting info from 2GIS <sup>' + WME_2gis_version + '</sup>&nbsp;<sub><a href="https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis" title="Link" target="_blank"><span class="fa fa-external-link"></span></a></sub></h4>'
+						+'<form class="attributes-form side-panel-section">'
+
+						+'<div class="form-group">'
+						+'<label class="control-label">Категории:</label>'
+						+'<div class="controls">'
+						+'<textarea id="wme2gis_cfg_categories" style="width:100%;height:200px;font-size:8pt" wrap="off"></textarea>'
+						+'<small>Сопоставление: 2gis=WME, каждая пара в отдельной строке.</small>'
+						+'</div>'
+						+'</div>'
+
+						+'<div class="form-group">'
+						+'<div class="controls">'
+						+'<label class="control-label">Блокировка</label>'
+						+'<div class="controls">'
+						+'<select class="form-control" data-type="numeric" id="wme2gis_cfg_UserRank"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option></select>'
+						+'</div>'
+						+'</div>'
+						+'</div>'
+
+						+'<div class="form-group">'
+						+'<div class="controls">'
+						+'<label class="control-label">Расстановка</label>'
+						+'<div class="controls">'
+						+'<select class="form-control" data-type="numeric" id="wme2gis_cfg_NavigationPoint"><option value="0">Точка входа</option><option value="1">В точке клика</option><option value="2">В пределах родителя</option><option value="3">Точка 2gis</option></select>'
+						+'</div>'
+						+'</div>'
+						+'</div>'
+
+						+'<div class="form-group">'
+						+'<div class="controls">'
+						+'<label class="control-label">Категория по умолчанию</label>'
+						+'<div class="controls">'
+						+'<select class="form-control" id="wme2gis_cfg_defcategory">'
+						+'';
+
+						for(var i in I18n.translations[I18n.locale].venues.categories)
+						{
+							srsCtrlinnerHTML += '<option value="'+i+'">'+I18n.translations[I18n.locale].venues.categories[i]+'</option>';
+						}
+
+					srsCtrlinnerHTML += ''
+						+'</select>'
+						+'</div>'
+						+'</div>'
+						+'</div>'
+
+						+'<div class="controls">'
+						+'<label class="control-label">Дополнительные настройки</label>'
+						+'<div class="controls">'
+						+'<input name="wme2gis_cfg_debug" value="" id="wme2gis_cfg_debug" type="checkbox"><label for="wme2gis_cfg_debug" title="Включить логирование">&nbsp;Debug script</label><br/>'
+						+'</div>'
+						+'</div>'
+
+						+'</form>'
+						+'</div>'
+						'';
+					// ------------------------------------------------------------
+					srsCtrl.innerHTML=srsCtrlinnerHTML;
+					tabContent.appendChild(srsCtrl);
+				}
+				else
+					srsCtrl.id='';
+			}
+			else
+				srsCtrl.id='';
+		}
+		else
+			srsCtrl.id='';
+
+		if(srsCtrl.id != '')
+		{
+			document.getElementById("wme2gis_cfg_debug").checked = wme2GIS_debug;
+			document.getElementById("wme2gis_cfg_debug").onclick = function(){wme2GIS_debug=this.checked;localStorage.setItem("wme2GIS_debug",wme2GIS_debug?"1":"0")};
+
+			document.getElementById("wme2gis_cfg_UserRank").selectedIndex = wme2GIS_UserRank;
+			document.getElementById("wme2gis_cfg_UserRank").onchange = function(){wme2GIS_UserRank=this.value;localStorage.setItem("wme2GIS_UserRank",wme2GIS_UserRank)};
+
+			// категории для выбора умолчания сортируем по названию
+			function sortSelect(selElem, checkElem)
+			{
+				var tmpAry = new Array();
+				for (var i=0;i<selElem.options.length;i++) {
+					tmpAry[i] = new Array();
+					tmpAry[i][0] = selElem.options[i].text;
+					tmpAry[i][1] = selElem.options[i].value;
+				}
+				tmpAry.sort();
+				while (selElem.options.length > 0) {
+					selElem.options[0] = null;
+				}
+				for (var i=0;i<tmpAry.length;i++) {
+					var op = new Option(tmpAry[i][0], tmpAry[i][1]);
+					selElem.options[i] = op;
+					if(tmpAry[i][1] === checkElem)
+					{
+						selElem.options[i].selected=true;
+					}
+				}
+			}
+			sortSelect(document.getElementById("wme2gis_cfg_defcategory"),wme2GIS_DefCategory);
+			document.getElementById("wme2gis_cfg_defcategory").onchange = function(){wme2GIS_DefCategory=this.value;localStorage.setItem("wme2GIS_DefCategory",wme2GIS_DefCategory)};
+
+
+			document.getElementById("wme2gis_cfg_NavigationPoint").selectedIndex = wme2GIS_NavigationPoint;
+			document.getElementById("wme2gis_cfg_NavigationPoint").onchange = function(){wme2GIS_NavigationPoint=this.value;localStorage.setItem("wme2GIS_NavigationPoint",wme2GIS_NavigationPoint)};
+
+			// формируем сопоставления 2гис=ВМЕ
+			cat='';
+			for(var i in wme2Gis_categories)
+			{
+				if(cat.length > 0)
+					cat+='\n';
+				cat+= i+"="+wme2Gis_categories[i];
+			}
+			document.getElementById("wme2gis_cfg_categories").value=cat;
+			document.getElementById("wme2gis_cfg_categories").onchange = function(){
+				var a1=this.value.split('\n');
+				var cfg={};
+				for(var i=0; i < a1.length; ++i)
+				{
+					var a2=a1[i].split('=');
+					cfg[a2[0]]=a2[1];
+				}
+				localStorage.setItem('wme2GIS_Categories', JSON.stringify(cfg));
+				for(var i in wme2Gis_categories)	{ delete wme2Gis_categories[i]; }
+				wme2Gis_categories = cloneConfig(cfg);
+			};
+		}
+
+	}
+	else
+		if (wme2GIS_debug) console.log("Wme2Gis_InitConfig(): found '"+CreateID()+"'");
+}
+
+//******************************************************
+function WMEGetInfo2Gis_HandCreatePOI()
+{
+	if ((typeof arguments[0]) === "object")
+	{
+		if ((typeof (arguments[0].poiType)) === "string")
+			$('.toolbar-group-venues').find('.dropdown-menu').find('.venues-toolbar-button').eq(6).find(arguments[0].poiType).click();
+	}
+}
+
+function wme_2gis_initBindPoi() {
+	var Config =[
+		{handler: 'WMEGetInfo2Gis_Point', title: "Создать точку",        func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.point-venue'}},
+		{handler: 'WMEGetInfo2Gis_Area',  title: "Создать лэндмарк",     func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue'}}
+	];
+	for(var i=0; i < Config.length; ++i)
+	{
+		WMEKSRegisterKeyboardShortcut('WME-getting-info-from-2GIS', 'WME-getting-info-from-2GIS', Config[i].handler, Config[i].title, Config[i].func, Config[i].key, Config[i].arg);
+	}
+
+    WMEKSLoadKeyboardShortcuts('WME-getting-info-from-2GIS');
+
+	window.addEventListener("beforeunload", function() {
+		WMEKSSaveKeyboardShortcuts('WME-getting-info-from-2GIS');
+	}, false);
+
+}
+
+
+//******************************************************
+function wme_2gis_init() {
+	if (wme2GIS_debug) console.log('wme_2gis_init');
+
+	var script2gis   = document.createElement('script');
 	script2gis.type  = "text/javascript";
 	script2gis.src   = "https://maps.api.2gis.ru/2.0/loader.js?pkg=full";
 	document.getElementsByTagName('head')[0].appendChild(script2gis);
-    
-    //var scriptFuse   = document.createElement('script');
+
+	//var scriptFuse   = document.createElement('script');
 	//scriptFuse.type  = "text/javascript";
 	//scriptFuse.src   = "https://raw.githubusercontent.com/krisk/fuse/master/src/fuse.min.js";
 	//document.getElementsByTagName('head')[0].appendChild(scriptFuse);
-    
-    
-    setTimeout(wme_2gis, 500);
+
+	setTimeout(wme_2gis, 500);
 }
 
 wme_2gis_init();
@@ -411,5 +1113,21 @@ wme_2gis_init();
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */ 
+ */
 !function(t){"use strict";function e(){console.log.apply(console,arguments)}function s(t,e){var s,n,r,i;for(this.list=t,this.options=e=e||{},s=0,i=["sort","shouldSort","verbose","tokenize"],n=i.length;n>s;s++)r=i[s],this.options[r]=r in e?e[r]:h[r];for(s=0,i=["searchFn","sortFn","keys","getFn","include"],n=i.length;n>s;s++)r=i[s],this.options[r]=e[r]||h[r]}function n(t,e,s){var i,o,h,a,p,c;if(e){if(h=e.indexOf("."),-1!==h?(i=e.slice(0,h),o=e.slice(h+1)):i=e,a=t[i],null!==a&&void 0!==a)if(o||"string"!=typeof a&&"number"!=typeof a)if(r(a))for(p=0,c=a.length;c>p;p++)n(a[p],o,s);else o&&n(a,o,s);else s.push(a)}else s.push(t);return s}function r(t){return"[object Array]"===Object.prototype.toString.call(t)}function i(t,e){e=e||{},this.options=e,this.options.location=e.location||i.defaultOptions.location,this.options.distance="distance"in e?e.distance:i.defaultOptions.distance,this.options.threshold="threshold"in e?e.threshold:i.defaultOptions.threshold,this.options.maxPatternLength=e.maxPatternLength||i.defaultOptions.maxPatternLength,this.pattern=e.caseSensitive?t:t.toLowerCase(),this.patternLen=t.length,this.patternLen<=this.options.maxPatternLength&&(this.matchmask=1<<this.patternLen-1,this.patternAlphabet=this._calculatePatternAlphabet())}var o=/ +/g,h={id:null,caseSensitive:!1,include:[],shouldSort:!0,searchFn:i,sortFn:function(t,e){return t.score-e.score},getFn:n,keys:[],verbose:!1,tokenize:!1};s.VERSION="2.0.1",s.prototype.set=function(t){return this.list=t,t},s.prototype.search=function(t){this.options.verbose&&e("=====================\n","Search term:",t),this.pattern=t,this.results=[],this.resultMap={},this._prepareSearchers(),this._startSearch(),this._computeScore(),this._sort();var s=this._format();return s},s.prototype._prepareSearchers=function(){var t=this.options,e=this.pattern,s=t.searchFn,n=e.split(o),r=0,i=n.length;if(this.options.tokenize)for(this.tokenSearchers=[];i>r;r++)this.tokenSearchers.push(new s(n[r],t));this.fullSeacher=new s(e,t)},s.prototype._startSearch=function(){var t,e,s=this.options,n=s.getFn,r=this.list,i=r.length,o=this.options.keys,h=o.length,a=null;if("string"==typeof r[0])for(t=0;i>t;t++)this._analyze(r[t],t,t);else for(t=0;i>t;t++)for(a=r[t],e=0;h>e;e++)this._analyze(n(a,o[e],[]),a,t)},s.prototype._analyze=function(t,s,n){var i,h,a,p,c,l,u,f,d,g,v,m,S,y,b,_=this.options,L=!1;if(void 0!==t&&null!==t)if(h=[],"string"==typeof t){if(i=t.split(o),_.verbose&&e("---------\n","Record:",i),this.options.tokenize){for(a=this.tokenSearchers,p=a.length,y=0;y<this.tokenSearchers.length;y++){for(g=this.tokenSearchers[y],v=[],b=0;b<i.length;b++)m=i[b],S=g.search(m),S.isMatch?(L=!0,v.push(S.score),h.push(S.score)):(v.push(1),h.push(1));_.verbose&&e('Score for "'+g.pattern+'":',v)}for(l=h[0],f=h.length,y=1;f>y;y++)l+=h[y];l/=f,_.verbose&&e("Individual word score average:",l)}d=this.fullSeacher.search(t),_.verbose&&e("Full text score:",d.score),u=d.score,void 0!==l&&(u=(u+l)/2),_.verbose&&e("Average",u),(L||d.isMatch)&&(c=this.resultMap[n],c?c.scores.push(u):(this.resultMap[n]={item:s,scores:[u]},this.results.push(this.resultMap[n])))}else if(r(t))for(y=0;y<t.length;y++)this._analyze(t[y],s,n)},s.prototype._computeScore=function(){var t,e,s,n,r,i=this.results;for(t=0;t<i.length;t++){for(s=0,n=i[t].scores,r=n.length,e=0;r>e;e++)s+=n[e];i[t].score=s/r}},s.prototype._sort=function(){var t=this.options;t.shouldSort&&(t.verbose&&e("Sorting...."),this.results.sort(t.sortFn))},s.prototype._format=function(){var t,s,n,r,i,o=this.options,h=o.getFn,a=[],p=this.results;for(o.verbose&&e("------------\n","Output:\n",p),r=o.id?function(t){p[t].item=h(p[t].item,o.id,[])[0]}:function(){},i=function(t){var e,s,n;if(o.include.length>0)for(e={item:p[t].item},n=0;n<o.include.length;n++)s=o.include[n],e[s]=p[t][s];else e=p[t].item;return e},s=0,n=p.length;n>s;s++)r(s),t=i(s),a.push(t);return a},i.defaultOptions={location:0,distance:100,threshold:.6,maxPatternLength:32},i.prototype._calculatePatternAlphabet=function(){var t={},e=0;for(e=0;e<this.patternLen;e++)t[this.pattern.charAt(e)]=0;for(e=0;e<this.patternLen;e++)t[this.pattern.charAt(e)]|=1<<this.pattern.length-e-1;return t},i.prototype._bitapScore=function(t,e){var s=t/this.patternLen,n=Math.abs(this.options.location-e);return this.options.distance?s+n/this.options.distance:n?1:s},i.prototype.search=function(t){var e,s,n,r,i,h,a,p,c,l,u,f,d,g,v,m,S,y,b=this.options;if(t=b.caseSensitive?t:t.toLowerCase(),this.pattern===t)return{isMatch:!0,score:0};if(this.patternLen>b.maxPatternLength)return S=t.match(new RegExp(this.pattern.replace(o,"|"))),y=!!S,{isMatch:y,score:y?.5:1};for(r=b.location,n=t.length,i=b.threshold,h=t.indexOf(this.pattern,r),-1!=h&&(i=Math.min(this._bitapScore(0,h),i),h=t.lastIndexOf(this.pattern,r+this.patternLen),-1!=h&&(i=Math.min(this._bitapScore(0,h),i))),h=-1,v=1,m=[],c=this.patternLen+n,e=0;e<this.patternLen;e++){for(a=0,p=c;p>a;)this._bitapScore(e,r+p)<=i?a=p:c=p,p=Math.floor((c-a)/2+a);for(c=p,l=Math.max(1,r-p+1),u=Math.min(r+p,n)+this.patternLen,f=Array(u+2),f[u+1]=(1<<e)-1,s=u;s>=l;s--)if(g=this.patternAlphabet[t.charAt(s-1)],0===e?f[s]=(f[s+1]<<1|1)&g:f[s]=(f[s+1]<<1|1)&g|((d[s+1]|d[s])<<1|1)|d[s+1],f[s]&this.matchmask&&(v=this._bitapScore(e,s-1),i>=v)){if(i=v,h=s-1,m.push(h),!(h>r))break;l=Math.max(1,2*r-h)}if(this._bitapScore(e+1,r)>i)break;d=f}return{isMatch:h>=0,score:0===v?.001:v}},"object"==typeof exports?module.exports=s:"function"==typeof define&&define.amd?define(function(){return s}):t.Fuse=s}(this);
+
+// from: https://greasyfork.org/en/users/5920-rickzabel
+/*
+when adding shortcuts each shortcut will need a uniuque name
+the command to add links is WMERegisterKeyboardShortcut(ScriptName, ShortcutsHeader, NewShortcut, ShortcutDescription, FunctionToCall, ShortcutKeysObj) {
+	ScriptName: This is the name of your script used to track all of your shortcuts on load and save.
+	ScriptName: replace 'WMEAwesome' with your scripts name such as 'SomeOtherScript'
+	ShortcutsHeader: this is the header that will show up in the keyboard editor
+	NewShortcut: This is the name of the shortcut and needs to be uniuque from all of the other shortcuts, from other scripts, and WME
+	ShortcutDescription: This wil show up as the text next to your shortcut
+	FunctionToCall: this is the name of your function that will be called when the keyboard shortcut is presses
+	ShortcutKeysObj: the is the object representing the keys watched set this to '-1' to let the users specify their own shortcuts.
+	ShortcutKeysObj: The alt, shift, and ctrl keys are A=alt, S=shift, C=ctrl. for short cut to use "alt shift ctrl and l" the object would be 'ASC+l'
+*/
+function WMEKSRegisterKeyboardShortcut(e,r,t,a,o,s,c){try{I18n.translations.en.keyboard_shortcuts.groups[e].members.length}catch(n){Waze.accelerators.Groups[e]=[],Waze.accelerators.Groups[e].members=[],I18n.translations.en.keyboard_shortcuts.groups[e]=[],I18n.translations.en.keyboard_shortcuts.groups[e].description=r,I18n.translations.en.keyboard_shortcuts.groups[e].members=[]}if(o&&"function"==typeof o){I18n.translations.en.keyboard_shortcuts.groups[e].members[t]=a,Waze.accelerators.addAction(t,{group:e});var l="-1",i={};i[l]=t,Waze.accelerators._registerShortcuts(i),null!==s&&(i={},i[s]=t,Waze.accelerators._registerShortcuts(i)),W.accelerators.events.register(t,null,function(){o(c)})}else alert("The function "+o+" has not been declared")}function WMEKSLoadKeyboardShortcuts(e){if(localStorage[e+"KBS"])for(var r=JSON.parse(localStorage[e+"KBS"]),t=0;t<r.length;t++)Waze.accelerators._registerShortcuts(r[t])}function WMEKSSaveKeyboardShortcuts(e){var r=[];for(var t in Waze.accelerators.Actions){var a="";if(Waze.accelerators.Actions[t].group==e){Waze.accelerators.Actions[t].shortcut?(Waze.accelerators.Actions[t].shortcut.altKey===!0&&(a+="A"),Waze.accelerators.Actions[t].shortcut.shiftKey===!0&&(a+="S"),Waze.accelerators.Actions[t].shortcut.ctrlKey===!0&&(a+="C"),""!==a&&(a+="+"),Waze.accelerators.Actions[t].shortcut.keyCode&&(a+=Waze.accelerators.Actions[t].shortcut.keyCode)):a="-1";var o={};o[a]=Waze.accelerators.Actions[t].id,r[r.length]=o}}localStorage[e+"KBS"]=JSON.stringify(r)}
+/* ********************************************************** */

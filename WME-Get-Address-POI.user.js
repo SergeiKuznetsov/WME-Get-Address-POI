@@ -838,7 +838,7 @@ function createPOI (poiobject) {
 			Waze.model.actionManager.add(new wazeActionUpdateFeatureAddress(poi, newAddressAtts, {streetIDField: 'streetID'} ));
 
 			// обеспечим автовыделение вновь созданного пои
-			Waze.selectionManager.select([poi_al.landmark]);
+			// Waze.selectionManager.select([poi_al.landmark]);
 			if (wme2GIS_debug) console.log(json_poi.rubrics);
             // сохраним информацию о пои в локальное хранилище
             localStorage.setItem("wme2GIS_id_" + json_poi.id, 1);

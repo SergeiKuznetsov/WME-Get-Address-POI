@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.7.6
+// @version      0.1.7.7
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include      https://*.waze.com/editor/*
@@ -12,7 +12,7 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.7.6';
+var WME_2gis_version = '0.1.7.7';
 var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
 var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
 var wazefeatureEditorLandmark = require("Waze/Modules/FeatureEditor/Landmark");
@@ -101,53 +101,20 @@ function wme_2gis() {
 		console.log('wme_2gis error');
 	}
 
-	var wme2GIS_debug0=localStorage.getItem("wme2GIS_debug");
-	if(wme2GIS_debug0 && (wme2GIS_debug0 === "true" || wme2GIS_debug0 === "1"))
-		wme2GIS_debug=true;
+	wme2GIS_debug = __GetLocalStorageItem("wme2GIS_debug",'bool',false);
 
-	var wme2GIS_AddAddress0=localStorage.getItem("wme2GIS_AddAddress");
-	if(wme2GIS_AddAddress0 && (wme2GIS_AddAddress0 === "true" || wme2GIS_AddAddress0 === "1"))
-		wme2GIS_AddAddress=true;
+	wme2GIS_AddAddress = __GetLocalStorageItem("wme2GIS_AddAddress",'bool',false);
 
-    var wme2GIS_dontselect0=localStorage.getItem("wme2GIS_dontselect");
-	if(wme2GIS_dontselect0 && (wme2GIS_dontselect0 === "true" || wme2GIS_dontselect0 === "1"))
-		wme2GIS_dontselect=true;
+    wme2GIS_dontselect = __GetLocalStorageItem("wme2GIS_dontselect",'bool',false);
 
-	var wme2GIS_NavigationPoint0=localStorage.getItem("wme2GIS_NavigationPoint");
-	if(wme2GIS_NavigationPoint0 && !isNaN(parseInt(wme2GIS_NavigationPoint0)))
-		wme2GIS_NavigationPoint=parseInt(wme2GIS_NavigationPoint0);
-	else
-		wme2GIS_NavigationPoint=0;
+	wme2GIS_NavigationPoint = __GetLocalStorageItem("wme2GIS_NavigationPoint",'int',0);
 
-	var wme2GIS_radius0=localStorage.getItem("wme2GIS_radius");
-	if(wme2GIS_radius0 && !isNaN(parseInt(wme2GIS_radius0)))
-		wme2GIS_radius=parseInt(wme2GIS_radius0);
-	else
-		wme2GIS_radius=10;
+	wme2GIS_radius = __GetLocalStorageItem("wme2GIS_radius",'int',10);
 
-	var wme2GIS_UserRank0=localStorage.getItem("wme2GIS_UserRank");
-	if(wme2GIS_UserRank0 && !isNaN(parseInt(wme2GIS_UserRank0)))
-		wme2GIS_UserRank=parseInt(wme2GIS_UserRank0);
-	else
-		wme2GIS_UserRank=Waze.loginManager.user.rank;
+	wme2GIS_UserRank = __GetLocalStorageItem("wme2GIS_UserRank",'int',Waze.loginManager.user.rank);
 
-	var wme2GIS_DefCategory0=localStorage.getItem("wme2GIS_DefCategory");
-	if(wme2GIS_DefCategory0 && wme2GIS_UserRank0.length>0)
-	{
-		if(I18n.translations[I18n.locale].venues.categories[wme2GIS_DefCategory])
-			wme2GIS_DefCategory=wme2GIS_DefCategory0;
-	}
-/*
-	var wme2Gis_categories00=localStorage.getItem("wme2GIS_Categories");
-	if (wme2Gis_categories00 && IsJsonString(wme2Gis_categories00))
-	{
-		wme2Gis_categories = cloneConfig(JSON.parse(wme2Gis_categories00));
-	}
-	else
-	{
-		wme2Gis_categories = cloneConfig(wme2Gis_categories0);
-	}
-*/
+	wme2GIS_DefCategory = __GetLocalStorageItem("wme2GIS_DefCategory",'arr','PROFESSIONAL_AND_PUBLIC',I18n.translations[I18n.locale].venues.categories);
+
 	setTimeout(wme_2gis_initBindPoi, 500);
 	setTimeout(Wme2Gis_InitConfig, 500);
 }
@@ -567,7 +534,7 @@ function getListPOI(){
 				var poi_list='';
 				for (var i = 0; i < total; i++) {
 					if(json.result.items[i] === undefined) break;
-                    if(localStorage.getItem("wme2GIS_id_" + json.result.items[i].id.split("_")[0]) === "1") poi_list+='<a href="#" style="padding-right:5px;" class="fa fa-check-square" poi="' + json.result.items[i].id.split("_")[0] + '"></a>';
+                    if(__GetLocalStorageItem("wme2GIS_id_" + json.result.items[i].id.split("_")[0],'bool',false)) poi_list+='<a href="#" style="padding-right:5px;" class="fa fa-check-square" poi="' + json.result.items[i].id.split("_")[0] + '"></a>';
                     else poi_list+='<a href="#" style="padding-right:5px;display:none;" class="fa fa-check-square" poi="' + json.result.items[i].id.split("_")[0] + '"></a>';
 					poi_list = poi_list + (i+1+(page-1)*50) + '.'
 						+' <a href="#"'
@@ -671,7 +638,14 @@ function createPOI (poiobject) {
 					}
 					break;
 				case 3: // около точки входа 2GIS
-                    var entrance_2gis = json_poi.links.entrances[0].geometry.points[0].replace(/.*\(([0-9\.]+) ([0-9\.]+)\)/,"$1 $2").split(" ");
+                    var entrance_2gis = [];
+                    if (typeof json_poi.links.entrances !== "undefined")
+                        entrance_2gis = json_poi.links.entrances[0].geometry.points[0].replace(/.*\(([0-9\.]+) ([0-9\.]+)\)/,"$1 $2").split(" ");
+                    else
+                    {
+                        entrance_2gis.push(json_poi.point.lon);
+                        entrance_2gis.push(json_poi.point.lat);
+                    }
                     var entrancePos=new OpenLayers.LonLat(entrance_2gis[0], entrance_2gis[1]);
 					// здесь требуется преобразование координат
 					entrancePos.transform(new OpenLayers.Projection("EPSG:4326"),new OpenLayers.Projection("EPSG:900913"));
@@ -1001,6 +975,31 @@ function wme_2gis_init() {
     document.getElementsByTagName('head')[0].appendChild(scriptMy);
 
 	setTimeout(wme_2gis, 500);
+}
+
+function __GetLocalStorageItem(Name,Type,Def,Arr)
+{
+    var tmp0=localStorage.getItem(Name);
+    if (tmp0)
+    {
+        switch(Type)
+        {
+            case 'bool':
+                tmp0=(tmp0 === "true" || tmp0 === "1")?true:false;
+                break;
+            case 'int':
+                tmp0=!isNaN(parseInt(tmp0))?parseInt(tmp0):0;
+                break;
+            case 'arr':
+                if (tmp0.length > 0)
+                    if(!Arr[tmp0])
+                        tmp0=Def;
+                break;
+        }
+    }
+    else
+        tmp0=Def;
+    return tmp0;
 }
 
 wme_2gis_init();

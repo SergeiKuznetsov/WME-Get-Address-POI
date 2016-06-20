@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.7.7
+// @version      0.1.7.8
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include      https://*.waze.com/editor/*
@@ -12,7 +12,7 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.7.7';
+var WME_2gis_version = '0.1.7.8';
 var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
 var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
 var wazefeatureEditorLandmark = require("Waze/Modules/FeatureEditor/Landmark");
@@ -25,6 +25,7 @@ var wme2GIS_AddAddress=false;
 var wme2GIS_UserRank=-1;
 var wme2GIS_radius=10;
 var wme2GIS_NavigationPoint=0; // размещать точки-пои рандомно, недалеко от точки входа
+var wme2GIS_HNFormat=0;
 var wme2GIS_DefCategory="PROFESSIONAL_AND_PUBLIC";
 
 //Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point
@@ -108,6 +109,8 @@ function wme_2gis() {
     wme2GIS_dontselect = __GetLocalStorageItem("wme2GIS_dontselect",'bool',false);
 
 	wme2GIS_NavigationPoint = __GetLocalStorageItem("wme2GIS_NavigationPoint",'int',0);
+    
+    wme2GIS_HNFormat = __GetLocalStorageItem("wme2GIS_HNFormat",'int',0);
 
 	wme2GIS_radius = __GetLocalStorageItem("wme2GIS_radius",'int',10);
 
@@ -167,6 +170,7 @@ function wme_2gis_InserHTML() {
 			error: function() {
 			},
 			success: function(json) {
+                if(!json.result)  return;
 				var script2   = document.createElement('script');
 				script2.type  = "text/javascript";
 				var s = document.getElementsByTagName('head')[0].appendChild(script2);
@@ -233,6 +237,7 @@ function wme_2gis_InserHTML() {
 			error: function() {
 			},
 			success: function(json) {
+                if(!json.results)  return;
 				var gm_obj = json.results[0].address_components;
 				if(gm_obj[0].long_name !== 'Unnamed Road') {
 					divGm.innerHTML='GM: <a href="#" id="gm_storeaddress" title="Заполнить адрес">'+gm_obj[0].long_name + ', ' + gm_obj[1].long_name+'</a>';
@@ -262,7 +267,7 @@ function wme_2gis_InserHTML() {
 			error: function() {
 			},
 			success: function(json) {
-
+                if(!json.response)  return;
 				function findSomething(object, name) {
 					//if (wme2GIS_debug) console.log(object);
 					if (name in object) return object[name];
@@ -322,6 +327,7 @@ function wme_2gis_InserHTML() {
 			error: function() {
 			},
 			success: function(json) {
+                if(!json.address)  return;
 				var osm_obj = json.address;
 				if(osm_obj.house_number !== undefined) {
 					divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>';
@@ -436,13 +442,37 @@ function __ModityAddressYM()
 		// ** обработка номера дома **
 		if(houseNumber && houseNumber !== "")
 		{
-
-			// удаляем пробелы
+            // удаляем пробелы
 			houseNumber=houseNumber.replace(/\s+/g, '');
-			// коррекция букв в номерах домов
-			houseNumber=houseNumber.toLowerCase();
-			if (houseNumber.indexOf("б") > -1) // "Б" делаем большим
-				houseNumber=houseNumber.toUpperCase();
+            // сокращаем
+            houseNumber=houseNumber.replace(/корпус/g, 'к');
+            houseNumber=houseNumber.replace(/строение/g, 'с');
+            houseNumber=houseNumber.replace(/владение/g, 'вл');
+            
+            switch(wme2GIS_HNFormat){
+                case 0:
+                    // коррекция в соответствии с 2gis
+                    houseNumber=houseNumber.toLowerCase();
+                    if (houseNumber.indexOf("б") > -1) // "Б" делаем большим
+                        houseNumber=houseNumber.toUpperCase();
+                    break;
+                case 1:
+                    // коррекция в соответствии с yandex
+                    houseNumber=houseNumber.toUpperCase();
+                    if (houseNumber.indexOf("К") > -1) houseNumber=houseNumber.substring(0,houseNumber.lastIndexOf("К")) + houseNumber.substring(houseNumber.lastIndexOf("К"), houseNumber.lastIndexOf("К")+1).toLowerCase() + houseNumber.slice(houseNumber.lastIndexOf("К")+1);
+                    if (houseNumber.indexOf("С") > -1) houseNumber=houseNumber.substring(0,houseNumber.lastIndexOf("С")) + houseNumber.substring(houseNumber.lastIndexOf("С"), houseNumber.lastIndexOf("С")+1).toLowerCase() + houseNumber.slice(houseNumber.lastIndexOf("С")+1);
+                    if (houseNumber.indexOf("ВЛ") > -1) houseNumber=houseNumber.substring(0,houseNumber.lastIndexOf("ВЛ")) + houseNumber.substring(houseNumber.lastIndexOf("ВЛ"), houseNumber.lastIndexOf("ВЛ")+2).toLowerCase() + houseNumber.slice(houseNumber.lastIndexOf("ВЛ")+2);
+                    if (houseNumber.indexOf("ДВ") > -1) houseNumber=houseNumber.substring(0,houseNumber.lastIndexOf("ДВ")) + houseNumber.substring(houseNumber.lastIndexOf("ДВ"), houseNumber.lastIndexOf("ДВ")+2).toLowerCase() + houseNumber.slice(houseNumber.lastIndexOf("ДВ")+2);
+                    break;
+                case 2:
+                    // коррекция в соответствии с BY
+                    houseNumber=houseNumber.toUpperCase();
+                    houseNumber=houseNumber.replace('К', '/');
+                    break;
+                default:
+                    break;
+            }
+			
 			// валидация
 
 
@@ -462,6 +492,11 @@ function __ModityAddressYM()
 			{
 				if(!$('input[name="name"]').val())
 					$('input[name="name"]').val(houseNumber).change();
+                else if($('input[name="name"]').val() !== houseNumber) {
+                    if(confirm ("Изменить Название POI "+$('input[name="name"]').val()+"->"+houseNumber+"?")) {
+                        $('input[name="name"]').val(houseNumber).change();
+                    }
+                }
 			}
 
 			//ставим лок
@@ -471,11 +506,11 @@ function __ModityAddressYM()
 				$('select[name="lockRank"]').val(wme2GIS_UserRank).change();
 
 			// ставить номер дома в адрес
-			if(!$('input['+GetControlName('housenumber')+']').val() && !(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))
+			if(!$('input['+GetControlName('housenumber')+']').val() && !(/^\d{1,6}[а-яА-Я0-9]{1,}\d{1,3}$/.test(houseNumber)))
 			{
 				$('input['+GetControlName('housenumber')+']').val(houseNumber).change();
 				mod=true;
-			} else if($('input['+GetControlName('housenumber')+']').val() !== houseNumber && !(/^\d{1,6}[а-я]{1,}\d{1,3}$/.test(houseNumber)))
+			} else if($('input['+GetControlName('housenumber')+']').val() !== houseNumber && !(/^\d{1,6}[а-яА-Я0-9]{1,}\d{1,3}$/.test(houseNumber)))
             {
                 if(confirm ("Изменить номер дома "+$('input['+GetControlName('housenumber')+']').val()+"->"+houseNumber+"?")) {
                     $('input['+GetControlName('housenumber')+']').val(houseNumber).change();
@@ -506,7 +541,7 @@ function __ModityAddressYM()
 }
 
 function getListPOI(){
-    var building_id=this.getAttribute('building_id')
+    var building_id=this.getAttribute('building_id');
 	var lonc=this.getAttribute('lon');
 	var latc=this.getAttribute('lat');
     var page=this.getAttribute('page');
@@ -792,6 +827,10 @@ function Wme2Gis_InitConfig()
 						+'<div class="controls">'
 						+'<select class="form-control" data-type="numeric" id="wme2gis_cfg_NavigationPoint"><option value="0">Точка входа</option><option value="1">В точке клика</option><option value="2">В пределах родителя</option><option value="3">Точка 2gis</option></select>'
 						+'</div>'
+						+'<label class="control-label" title="Формат номера дома">Формат номера дома</label>'
+						+'<div class="controls">'
+						+'<select class="form-control" data-type="numeric" id="wme2gis_cfg_HNFormat"><option value="0">2GIS (2а, 2ак1, 2Б)</option><option value="1">Yandex (2А, 2Ак1, 2Б)</option><option value="2">BY (2А, 2А/1, 2Б)</option></select>'
+						+'</div>'                    
 						+'<div class="controls">'
 						+'<label class="control-label" title="В пределах скольки метров ставить новый POI относительно настройки Расстановка">Радиус (м):</label>'
 						+'<input name="wme2gis_cfg_radius" class="form-control" autocomplete="off" value="" id="wme2gis_cfg_radius" type="text" size="13">'
@@ -829,10 +868,10 @@ function Wme2Gis_InitConfig()
 						+'<div class="controls">'
 						+'<label class="control-label">Дополнительные настройки</label>'
                         +'<div class="controls">'
-						+'<input name="wme2gis_cfg_addaddress" value="" id="wme2gis_cfg_addaddress" type="checkbox"><label for="wme2gis_cfg_addaddress" title="Для вновь созданной точки в поле Описание добавлять адрес.">&nbsp;Добавить адрес</label><br/>'
+						+'<input name="wme2gis_cfg_addaddress" value="" id="wme2gis_cfg_addaddress" type="checkbox"><label for="wme2gis_cfg_addaddress" title="Для вновь созданной точки в поле Описание добавлять адрес.">&nbsp;Добавить адрес в описание</label><br/>'
 						+'</div>'
                         +'<div class="controls">'
-						+'<input name="wme2gis_cfg_dontselect" value="" id="wme2gis_cfg_dontselect" type="checkbox"><label for="wme2gis_cfg_dontselect" title="Не выделять новое POI">&nbsp;После создания точки не выделять</label><br/>'
+						+'<input name="wme2gis_cfg_dontselect" value="" id="wme2gis_cfg_dontselect" type="checkbox"><label for="wme2gis_cfg_dontselect" title="Не переключаться на новое POI.">&nbsp;Не выделять новое POI</label><br/>'
 						+'</div>'
 						+'<div class="controls">'
 						+'<input name="wme2gis_cfg_debug" value="" id="wme2gis_cfg_debug" type="checkbox"><label for="wme2gis_cfg_debug" title="Включить логирование">&nbsp;Debug script</label><br/>'
@@ -901,6 +940,8 @@ function Wme2Gis_InitConfig()
 			document.getElementById("wme2gis_cfg_NavigationPoint").selectedIndex = wme2GIS_NavigationPoint;
 			document.getElementById("wme2gis_cfg_NavigationPoint").onchange = function(){wme2GIS_NavigationPoint=parseInt(this.value);console.log('wme2gis_cfg_NavigationPoint='+this.value);localStorage.setItem("wme2GIS_NavigationPoint",wme2GIS_NavigationPoint);};
 
+            document.getElementById("wme2gis_cfg_HNFormat").selectedIndex = wme2GIS_HNFormat;
+			document.getElementById("wme2gis_cfg_HNFormat").onchange = function(){wme2GIS_HNFormat=parseInt(this.value);console.log('wme2gis_cfg_HNFormat='+this.value);localStorage.setItem("wme2GIS_HNFormat",wme2GIS_HNFormat);};
 			// формируем сопоставления 2гис=ВМЕ
 			/*
             cat='';

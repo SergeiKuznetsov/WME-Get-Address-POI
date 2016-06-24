@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.7.8
+// @version      0.1.7.10
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include      https://*.waze.com/editor/*
@@ -12,7 +12,7 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.7.8';
+var WME_2gis_version = '0.1.7.10';
 var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
 var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
 var wazefeatureEditorLandmark = require("Waze/Modules/FeatureEditor/Landmark");
@@ -27,6 +27,9 @@ var wme2GIS_radius=10;
 var wme2GIS_NavigationPoint=0; // размещать точки-пои рандомно, недалеко от точки входа
 var wme2GIS_HNFormat=0;
 var wme2GIS_DefCategory="PROFESSIONAL_AND_PUBLIC";
+var wme2GIS_osmmap=false;
+var wme2GIS_yamap=false;
+var wme2GIS_2gismap=false;
 
 //Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point
 
@@ -102,8 +105,6 @@ function wme_2gis() {
         console.log('wme_2gis error');
     }
 
-    wme2GIS_debug = __GetLocalStorageItem("wme2GIS_debug",'bool',false);
-
     wme2GIS_AddAddress = __GetLocalStorageItem("wme2GIS_AddAddress",'bool',false);
 
     wme2GIS_dontselect = __GetLocalStorageItem("wme2GIS_dontselect",'bool',false);
@@ -171,13 +172,15 @@ function wme_2gis_InserHTML() {
             },
             success: function(json) {
                 if(!json.result)  return;
-                var script2   = document.createElement('script');
-                script2.type  = "text/javascript";
-                var s = document.getElementsByTagName('head')[0].appendChild(script2);
-                s.innerHTML='var map; DG.then(function () {map = DG.map(\'map_2gis\', {center: [' + poiPos.lat + ',' + poiPos.lon + '],zoom: 17,fullscreenControl: false,zoomControl: false});});';
+                if(wme2GIS_2gismap){
+                    var script2   = document.createElement('script');
+                    script2.type  = "text/javascript";
+                    var s = document.getElementsByTagName('head')[0].appendChild(script2);
+                    s.innerHTML='var map; DG.then(function () {map = DG.map(\'map_2gis\', {center: [' + poiPos.lat + ',' + poiPos.lon + '],zoom: 17,fullscreenControl: false,zoomControl: false});});';
+                }
 
                 div2gis.innerHTML = '2GIS: ' + json.result.items[0].full_name + '<br/>' +
-                    '<div id="map_2gis" style="width:275px; height:275px"></div>';
+                    (wme2GIS_2gismap?'<div id="map_2gis" style="width:275px; height:275px"></div>':'');
 
                 // у точки не отображаем организайии, если она в пределах родителя
                 var ispoint=Waze.selectionManager.hasSelectedItems() && Waze.selectionManager.selectedItems[0].model.attributes.geometry.id.indexOf(".Point") >= 0;
@@ -241,7 +244,7 @@ function wme_2gis_InserHTML() {
                 var gm_obj = json.results[0].address_components;
                 if(gm_obj[0].long_name !== 'Unnamed Road') {
                     divGm.innerHTML='GM: <a href="#" id="gm_storeaddress" title="Заполнить адрес">'+gm_obj[0].long_name + ', ' + gm_obj[1].long_name+'</a>';
-                    divGm.onclick =  __ModityAddressYM;
+                    document.getElementById('gm_storeaddress').onclick =  __ModityAddressYM;
                     if(gm_obj[2].long_name !== null)
                         document.getElementById('gm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
                     if(gm_obj[1].long_name !== null)
@@ -291,8 +294,18 @@ function wme_2gis_InserHTML() {
                 var houseNumber = findSomething(ym_obj, "PremiseNumber");
 
                 if(houseNumber !== undefined && houseNumber !== null) {
-                    divYm.innerHTML='YM: <a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>';
-                    divYm.onclick =  __ModityAddressYM;
+                    divYm.innerHTML='YM: <a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>'+
+                        (wme2GIS_yamap?'<div id="map_ya" style="width:275px; height:275px;"></div>':'');
+
+                    if(wme2GIS_yamap){
+                        var map = new ymaps.Map("map_ya", {
+                            center: [poiPos.lat, poiPos.lon],
+                            zoom: 17,
+                            controls: ["zoomControl", "fullscreenControl"]
+                        });
+                    }
+
+                    document.getElementById('ym_storeaddress').onclick =  __ModityAddressYM;
 
                     var ym_locality = findSomething(ym_obj, "LocalityName");
                     if(typeof(ym_locality.DependentLocality) !== undefined) ym_locality = ym_locality.DependentLocality;
@@ -330,8 +343,33 @@ function wme_2gis_InserHTML() {
                 if(!json.address)  return;
                 var osm_obj = json.address;
                 if(osm_obj.house_number !== undefined) {
-                    divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>';
-                    divOsm.onclick =  __ModityAddressYM;
+
+                    divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>' +
+                        (wme2GIS_osmmap?'<div id="map_osm" style="width:275px; height:275px;"></div>':'');
+                    if(wme2GIS_osmmap){
+                        //Google maps API initialisation
+                        var element = document.getElementById("map_osm");
+
+                        var map = new google.maps.Map(element, {
+                            center: new google.maps.LatLng(poiPos.lat, poiPos.lon),
+                            zoom: 17,
+                            mapTypeId: "OSM",
+                            mapTypeControl: false,
+                            streetViewControl: false
+                        });
+
+                        //Define OSM map type pointing at the OpenStreetMap tile server
+                        map.mapTypes.set("OSM", new google.maps.ImageMapType({
+                            getTileUrl: function(coord, zoom) {
+                                return "http://tile.openstreetmap.org/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+                            },
+                            tileSize: new google.maps.Size(256, 256),
+                            name: "OpenStreetMap",
+                            maxZoom: 18
+                        }));
+
+                    }
+                    document.getElementById('osm_storeaddress').onclick =  __ModityAddressYM;
                     //document.getElementById('osm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
                     document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
                     document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
@@ -345,11 +383,11 @@ function wme_2gis_InserHTML() {
 
 function __ModityAddressYM()
 {
-    var cityName=this.children[0].getAttribute('cityname');
+    var cityName=this.getAttribute('cityname');
     if (wme2GIS_debug) console.log(cityName);
-    var streetName=this.children[0].getAttribute('streetname');
+    var streetName=this.getAttribute('streetname');
     if (wme2GIS_debug) console.log(streetName);
-    var houseNumber=this.children[0].getAttribute('housenumber');
+    var houseNumber=this.getAttribute('housenumber');
     if (wme2GIS_debug) console.log(houseNumber);
     var mod=false;
 
@@ -830,7 +868,7 @@ function Wme2Gis_InitConfig()
                         +'<label class="control-label" title="Формат номера дома">Формат номера дома</label>'
                         +'<div class="controls">'
                         +'<select class="form-control" data-type="numeric" id="wme2gis_cfg_HNFormat"><option value="0">2GIS (2а, 2ак1, 2Б)</option><option value="1">Yandex (2А, 2Ак1, 2Б)</option><option value="2">BY (2А, 2А/1, 2Б)</option></select>'
-                        +'</div>'                    
+                        +'</div>'
                         +'<div class="controls">'
                         +'<label class="control-label" title="В пределах скольки метров ставить новый POI относительно настройки Расстановка">Радиус (м):</label>'
                         +'<input name="wme2gis_cfg_radius" class="form-control" autocomplete="off" value="" id="wme2gis_cfg_radius" type="text" size="13">'
@@ -861,6 +899,21 @@ function Wme2Gis_InitConfig()
                         +'<label class="control-label" title="Уровень блокировки новых POI">Блокировка</label>'
                         +'<div class="controls">'
                         +'<select class="form-control" data-type="numeric" id="wme2gis_cfg_UserRank"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option></select>'
+                        +'</div>'
+                        +'</div>'
+                        +'</div>'
+
+                        +'<div class="form-group">'
+                        +'<div class="controls">'
+                        +'<label class="control-label" title="Какие карты показывать">Показать карты</label>'
+                        +'<div class="controls">'
+                        +'<input name="wme2gis_cfg_2gismap" value="" id="wme2gis_cfg_2gismap" type="checkbox"><label for="wme2gis_cfg_2gismap" title="Показывать карту 2gis">&nbsp;Карта 2GIS</label><br/>'
+                        +'</div>'
+                        +'<div class="controls">'
+                        +'<input name="wme2gis_cfg_yamap" value="" id="wme2gis_cfg_yamap" type="checkbox"><label for="wme2gis_cfg_yamap" title="Показывать карту Yandex">&nbsp;Карта Yandex</label><br/>'
+                        +'</div>'
+                        +'<div class="controls">'
+                        +'<input name="wme2gis_cfg_osmmap" value="" id="wme2gis_cfg_osmmap" type="checkbox"><label for="wme2gis_cfg_osmmap" title="Показывать карту OSM">&nbsp;Карта OSM</label><br/>'
                         +'</div>'
                         +'</div>'
                         +'</div>'
@@ -898,6 +951,15 @@ function Wme2Gis_InitConfig()
         {
             document.getElementById("wme2gis_cfg_debug").checked = wme2GIS_debug;
             document.getElementById("wme2gis_cfg_debug").onclick = function(){wme2GIS_debug=this.checked;localStorage.setItem("wme2GIS_debug",wme2GIS_debug?"1":"0");};
+
+            document.getElementById("wme2gis_cfg_osmmap").checked = wme2GIS_osmmap;
+            document.getElementById("wme2gis_cfg_osmmap").onclick = function(){wme2GIS_osmmap=this.checked;localStorage.setItem("wme2GIS_osmmap",wme2GIS_osmmap?"1":"0");};
+
+            document.getElementById("wme2gis_cfg_yamap").checked = wme2GIS_yamap;
+            document.getElementById("wme2gis_cfg_yamap").onclick = function(){wme2GIS_yamap=this.checked;localStorage.setItem("wme2GIS_yamap",wme2GIS_yamap?"1":"0");if(wme2GIS_yamap) wme_2gis_init_script('ymap');};
+
+            document.getElementById("wme2gis_cfg_2gismap").checked = wme2GIS_2gismap;
+            document.getElementById("wme2gis_cfg_2gismap").onclick = function(){wme2GIS_2gismap=this.checked;localStorage.setItem("wme2GIS_2gismap",wme2GIS_2gismap?"1":"0");if(wme2GIS_2gismap) wme_2gis_init_script('2gis');};
 
             document.getElementById("wme2gis_cfg_addaddress").checked = wme2GIS_AddAddress;
             document.getElementById("wme2gis_cfg_addaddress").onclick = function(){wme2GIS_AddAddress=this.checked;localStorage.setItem("wme2GIS_AddAddress",wme2GIS_AddAddress?"1":"0");};
@@ -1001,14 +1063,68 @@ function wme_2gis_initBindPoi() {
 }
 
 
+// подгрузка скриптов
+function wme_2gis_init_script(t)
+{
+    switch(t)
+    {
+        case '2gis':
+        {
+            if (!document.getElementById('wme2GIS_2gismap'))
+            {
+                // 1. создаём контейнер с ID
+                var script2gisDiv= document.createElement('div');
+                script2gisDiv.id = "wme2GIS_2gismap";
+                script2gisDiv.setAttribute('style','display:none;');
+                document.getElementsByTagName('body')[0].appendChild(script2gisDiv);
+
+                // 2. ...в него сюём скрипт
+                var script2gis   = document.createElement('script');
+                script2gis.type  = "text/javascript";
+                script2gis.src   = "https://maps.api.2gis.ru/2.0/loader.js?pkg=basic";
+                document.getElementById('wme2GIS_2gismap').appendChild(script2gis);
+            }
+            break;
+        }
+        case 'ymap':
+        {
+            if (!document.getElementById('wme2GIS_yamap'))
+            {
+                var scriptyamapDiv= document.createElement('div');
+                scriptyamapDiv.id = "wme2GIS_yamap";
+                scriptyamapDiv.setAttribute('style','display:none;');
+                document.getElementsByTagName('body')[0].appendChild(scriptyamapDiv);
+
+                var scriptyamap   = document.createElement('script');
+                scriptyamap.type  = "text/javascript";
+                scriptyamap.src   = "https://api-maps.yandex.ru/2.1/?lang=ru_RU";
+                document.getElementById('wme2GIS_yamap').appendChild(scriptyamap);
+            }
+            break;
+        }
+
+        //....
+    }
+}
+
 //******************************************************
 function wme_2gis_init() {
+
+    wme2GIS_debug = __GetLocalStorageItem("wme2GIS_debug",'bool',false);
+
+    wme2GIS_osmmap = __GetLocalStorageItem("wme2GIS_osmmap",'bool',false);
+
+    wme2GIS_yamap = __GetLocalStorageItem("wme2GIS_yamap",'bool',false);
+
+    wme2GIS_2gismap = __GetLocalStorageItem("wme2GIS_2gismap",'bool',false);
+
     if (wme2GIS_debug) console.log('wme_2gis_init');
 
-    var script2gis   = document.createElement('script');
-    script2gis.type  = "text/javascript";
-    script2gis.src   = "https://maps.api.2gis.ru/2.0/loader.js?pkg=full";
-    document.getElementsByTagName('head')[0].appendChild(script2gis);
+    if(wme2GIS_2gismap) // потом подгрузим, если что, из настроек
+        wme_2gis_init_script('2gis');
+
+    if(wme2GIS_yamap) // потом подгрузим, если что, из настроек
+        wme_2gis_init_script('ymap');
 
     var scriptMy   = document.createElement('script');
     scriptMy.type  = "text/javascript";

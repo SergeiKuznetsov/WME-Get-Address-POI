@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.7.10
+// @version      0.1.7.11
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include      https://*.waze.com/editor/*
@@ -12,7 +12,7 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.7.10';
+var WME_2gis_version = '0.1.7.11';
 var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
 var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
 var wazefeatureEditorLandmark = require("Waze/Modules/FeatureEditor/Landmark");
@@ -30,6 +30,7 @@ var wme2GIS_DefCategory="PROFESSIONAL_AND_PUBLIC";
 var wme2GIS_osmmap=false;
 var wme2GIS_yamap=false;
 var wme2GIS_2gismap=false;
+var wme2GIS_gmmap=false; // TODO!!!
 
 //Waze.selectionManager.selectedItems[0].model.getNavigationPoint().point
 
@@ -84,16 +85,31 @@ function wme_2gis() {
     console.log('Starting wme_2gis');
     if (typeof Waze === "undefined")
     {
+        console.log("undef Waze");
         setTimeout(wme_2gis,500);
         return;
     }
     if (typeof Waze.selectionManager === "undefined")
     {
+        console.log("undef Waze.selectionManager");
         setTimeout(wme_2gis,500);
         return;
     }
     if (typeof Waze.model === "undefined")
     {
+        console.log("undef Waze.model");
+        setTimeout(wme_2gis,500);
+        return;
+    }
+    if (typeof Waze.loginManager === "undefined")
+    {
+        console.log("undef Waze.loginManager");
+        setTimeout(wme_2gis,500);
+        return;
+    }
+    if (typeof Waze.loginManager.user === "undefined" || Waze.loginManager.user === null)
+    {
+        console.log("Waze.loginManager.user undefined OR null");
         setTimeout(wme_2gis,500);
         return;
     }
@@ -102,7 +118,7 @@ function wme_2gis() {
         Waze.selectionManager.events.register("selectionchanged", null, wme_2gis_InserHTML);
     }
     catch (err) {
-        console.log('wme_2gis error');
+        console.log('wme_2gis error: '+err.message);
     }
 
     wme2GIS_AddAddress = __GetLocalStorageItem("wme2GIS_AddAddress",'bool',false);
@@ -115,9 +131,19 @@ function wme_2gis() {
 
     wme2GIS_radius = __GetLocalStorageItem("wme2GIS_radius",'int',10);
 
-    wme2GIS_UserRank = __GetLocalStorageItem("wme2GIS_UserRank",'int',Waze.loginManager.user.rank);
+    try {
+        wme2GIS_UserRank = __GetLocalStorageItem("wme2GIS_UserRank",'int',Waze.loginManager.user.rank);
+    }
+    catch (err) {
+        console.log('wme_2gis error: '+err.message);
+    }
 
-    wme2GIS_DefCategory = __GetLocalStorageItem("wme2GIS_DefCategory",'arr','PROFESSIONAL_AND_PUBLIC',I18n.translations[I18n.locale].venues.categories);
+    try {
+        wme2GIS_DefCategory = __GetLocalStorageItem("wme2GIS_DefCategory",'arr','PROFESSIONAL_AND_PUBLIC',I18n.translations[I18n.locale].venues.categories);
+    }
+    catch (err) {
+        console.log('wme_2gis error: '+err.message);
+    }
 
     setTimeout(wme_2gis_initBindPoi, 500);
     setTimeout(Wme2Gis_InitConfig, 500);
@@ -125,6 +151,7 @@ function wme_2gis() {
 
 
 function wme_2gis_InserHTML() {
+    if (wme2GIS_debug) console.log("wme_2gis_InserHTML()");
 
     if (Waze.selectionManager.selectedItems.length > 0 && Waze.selectionManager.selectedItems[0].model.type === "venue") {
         if (wme2GIS_debug) console.log('wme_2gis_InserHTML');
@@ -133,7 +160,10 @@ function wme_2gis_InserHTML() {
             '<div class="form-group"> \
 <label class="control-label">External POI (version ' + WME_2gis_version + ')</label> \
 <div class="controls"> \
-<div id="2gis"></div><div id="gm"></div><div id="ym"></div><div id="osm"></div> \
+<div id="2gis0"><div id="2gis"></div><div id="map_2gis"></div></div> \
+<div id="gm0"><div id="gm"></div><div id="street-view"></div></div> \
+<div id="ym0"><div id="ym"></div><div id="map_ya"></div></div> \
+<div id="osm0"><div id="osm"></div><div id="map_osm"></div></div> \
 </div> \
 </div> \
 </div>'
@@ -142,6 +172,11 @@ function wme_2gis_InserHTML() {
         var divGm = document.getElementById('gm');
         var divYm = document.getElementById('ym');
         var divOsm = document.getElementById('osm');
+
+        document.getElementById("map_2gis").setAttribute('style',wme2GIS_2gismap?'width:275px; height:275px':'display:none;');
+        document.getElementById("map_ya").setAttribute('style',wme2GIS_yamap?'width:275px; height:275px':'display:none;');
+        document.getElementById("map_osm").setAttribute('style',wme2GIS_osmmap?'width:275px; height:275px':'display:none;');
+        document.getElementById("street-view").setAttribute('style',wme2GIS_gmmap?'width:275px; height:275px':'display:none;');
 
         //getting lon/lat selected point
         var poi_id=Waze.selectionManager.selectedItems[0].model.attributes.id;
@@ -171,7 +206,11 @@ function wme_2gis_InserHTML() {
             error: function() {
             },
             success: function(json) {
-                if(!json.result)  return;
+                if(!json.result)
+                {
+                    document.getElementById("map_2gis").setAttribute('style','display:none;');
+                    return;
+                }
                 if(wme2GIS_2gismap){
                     var script2   = document.createElement('script');
                     script2.type  = "text/javascript";
@@ -179,8 +218,7 @@ function wme_2gis_InserHTML() {
                     s.innerHTML='var map; DG.then(function () {map = DG.map(\'map_2gis\', {center: [' + poiPos.lat + ',' + poiPos.lon + '],zoom: 17,fullscreenControl: false,zoomControl: false});});';
                 }
 
-                div2gis.innerHTML = '2GIS: ' + json.result.items[0].full_name + '<br/>' +
-                    (wme2GIS_2gismap?'<div id="map_2gis" style="width:275px; height:275px"></div>':'');
+                div2gis.innerHTML = '2GIS: ' + json.result.items[0].full_name + '<br/>';
 
                 // у точки не отображаем организайии, если она в пределах родителя
                 var ispoint=Waze.selectionManager.hasSelectedItems() && Waze.selectionManager.selectedItems[0].model.attributes.geometry.id.indexOf(".Point") >= 0;
@@ -240,10 +278,26 @@ function wme_2gis_InserHTML() {
             error: function() {
             },
             success: function(json) {
-                if(!json.results)  return;
+                if(!json.results)
+                {
+                    document.getElementById("street-view").setAttribute('style','display:none;');
+                    return;
+                }
                 var gm_obj = json.results[0].address_components;
+//window.gm_obj=gm_obj;
                 if(gm_obj[0].long_name !== 'Unnamed Road') {
                     divGm.innerHTML='GM: <a href="#" id="gm_storeaddress" title="Заполнить адрес">'+gm_obj[0].long_name + ', ' + gm_obj[1].long_name+'</a>';
+
+                    //var StreetViewPanorama=
+                    new google.maps.StreetViewPanorama(
+                        document.getElementById('street-view'),
+                        {
+                            position: {lat: poiPos.lat, lng: poiPos.lon},
+                            pov: {heading: 165, pitch: 0},
+                            zoom: 1
+                        });
+                    // StreetViewPanorama.setPov({ heading: 90, pitch: 0, zoom: 1 })
+
                     document.getElementById('gm_storeaddress').onclick =  __ModityAddressYM;
                     if(gm_obj[2].long_name !== null)
                         document.getElementById('gm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
@@ -251,6 +305,11 @@ function wme_2gis_InserHTML() {
                         document.getElementById('gm_storeaddress').setAttribute('streetName', gm_obj[1].long_name);
                     if(gm_obj[0].long_name !== null)
                         document.getElementById('gm_storeaddress').setAttribute('houseNumber', gm_obj[0].long_name);
+                }
+                else
+                {
+                    document.getElementById("street-view").setAttribute('style','display:none;');
+                    divGm.innerHTML='GM: ЗДЕСЬ РЫБЫ НЕТ!'; //!!!!!
                 }
             }
         });
@@ -270,7 +329,12 @@ function wme_2gis_InserHTML() {
             error: function() {
             },
             success: function(json) {
-                if(!json.response)  return;
+                if(!json.response)
+                {
+                    document.getElementById("map_ya").setAttribute('style','display:none;');
+                    return;
+                }
+
                 function findSomething(object, name) {
                     //if (wme2GIS_debug) console.log(object);
                     if (name in object) return object[name];
@@ -293,20 +357,14 @@ function wme_2gis_InserHTML() {
                 }
                 var houseNumber = findSomething(ym_obj, "PremiseNumber");
 
-                if(houseNumber !== undefined && houseNumber !== null) {
-                    divYm.innerHTML='YM: <a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>'+
-                        (wme2GIS_yamap?'<div id="map_ya" style="width:275px; height:275px;"></div>':'');
+                var innerHTML=((houseNumber !== undefined && houseNumber !== null) || wme2GIS_yamap)?'YM: ':'';
+                if(houseNumber !== undefined && houseNumber !== null)
+                    innerHTML+='<a href="#" id="ym_storeaddress" title="Заполнить адрес">' + houseNumber + ', ' + streetName + '</a>';
+                divYm.innerHTML=innerHTML;
 
-                    if(wme2GIS_yamap){
-                        var map = new ymaps.Map("map_ya", {
-                            center: [poiPos.lat, poiPos.lon],
-                            zoom: 17,
-                            controls: ["zoomControl", "fullscreenControl"]
-                        });
-                    }
-
+                if(houseNumber !== undefined && houseNumber !== null)
+                {
                     document.getElementById('ym_storeaddress').onclick =  __ModityAddressYM;
-
                     var ym_locality = findSomething(ym_obj, "LocalityName");
                     if(typeof(ym_locality.DependentLocality) !== undefined) ym_locality = ym_locality.DependentLocality;
 
@@ -316,6 +374,14 @@ function wme_2gis_InserHTML() {
                         document.getElementById('ym_storeaddress').setAttribute('streetName', streetName);
                     if(houseNumber !== null && document.getElementById('ym_storeaddress'))
                         document.getElementById('ym_storeaddress').setAttribute('houseNumber', houseNumber);
+                }
+
+                if(wme2GIS_yamap){
+                    var map = new ymaps.Map("map_ya", {
+                        center: [poiPos.lat, poiPos.lon],
+                        zoom: 17,
+                        controls: ["zoomControl", "fullscreenControl"]
+                    });
                 }
             }
         });
@@ -340,39 +406,55 @@ function wme_2gis_InserHTML() {
             error: function() {
             },
             success: function(json) {
-                if(!json.address)  return;
+                if(!json.address)
+                {
+                    document.getElementById("map_osm").setAttribute('style','display:none;');
+                    return;
+                }
                 var osm_obj = json.address;
-                if(osm_obj.house_number !== undefined) {
 
-                    divOsm.innerHTML='OSM: <a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>' +
-                        (wme2GIS_osmmap?'<div id="map_osm" style="width:275px; height:275px;"></div>':'');
-                    if(wme2GIS_osmmap){
-                        //Google maps API initialisation
-                        var element = document.getElementById("map_osm");
+                if(!(osm_obj.house_number !== undefined || wme2GIS_osmmap))
+                {
+                    document.getElementById("map_osm").setAttribute('style','display:none;');
+                    return; // лишнее не отображаем
+                }
 
-                        var map = new google.maps.Map(element, {
-                            center: new google.maps.LatLng(poiPos.lat, poiPos.lon),
-                            zoom: 17,
-                            mapTypeId: "OSM",
-                            mapTypeControl: false,
-                            streetViewControl: false
-                        });
+                var innerHTML=osm_obj.house_number !== undefined || wme2GIS_osmmap?'OSM: ':'';
+//window.osm_obj=osm_obj;
+                if(osm_obj.house_number !== undefined)
+                    innerHTML+='<a href="#" id="osm_storeaddress" title="Заполнить адрес">'+osm_obj.house_number + ', ' + osm_obj.road + '</a>';
 
-                        //Define OSM map type pointing at the OpenStreetMap tile server
-                        map.mapTypes.set("OSM", new google.maps.ImageMapType({
-                            getTileUrl: function(coord, zoom) {
-                                return "http://tile.openstreetmap.org/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
-                            },
-                            tileSize: new google.maps.Size(256, 256),
-                            name: "OpenStreetMap",
-                            maxZoom: 18
-                        }));
+                divOsm.innerHTML=innerHTML;
 
-                    }
+                if(osm_obj.house_number !== undefined)
+                {
                     document.getElementById('osm_storeaddress').onclick =  __ModityAddressYM;
                     //document.getElementById('osm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
                     document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
                     document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
+                }
+                if(wme2GIS_osmmap)
+                {
+                    //Google maps API initialisation
+                    var element = document.getElementById("map_osm");
+
+                    var map = new google.maps.Map(element, {
+                        center: new google.maps.LatLng(poiPos.lat, poiPos.lon),
+                        zoom: 17,
+                        mapTypeId: "OSM",
+                        mapTypeControl: false,
+                        streetViewControl: false
+                    });
+
+                    //Define OSM map type pointing at the OpenStreetMap tile server
+                    map.mapTypes.set("OSM", new google.maps.ImageMapType({
+                        getTileUrl: function(coord, zoom) {
+                            return "http://tile.openstreetmap.org/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+                        },
+                        tileSize: new google.maps.Size(256, 256),
+                        name: "OpenStreetMap",
+                        maxZoom: 18
+                    }));
                 }
             }
         });
@@ -543,19 +625,17 @@ function __ModityAddressYM()
             if($('select[name="lockRank"]').val() !== wme2GIS_UserRank)
                 $('select[name="lockRank"]').val(wme2GIS_UserRank).change();
 
-            // ставить номер дома в адрес
-            if(!$('input['+GetControlName('housenumber')+']').val() && !(/^\d{1,6}[а-яА-Я0-9]{1,}\d{1,3}$/.test(houseNumber)))
+            // если ХН пусто или не совпадает с новым
+            if(!$('input['+GetControlName('housenumber')+']').val() || $('input['+GetControlName('housenumber')+']').val() !== houseNumber)
             {
-                $('input['+GetControlName('housenumber')+']').val(houseNumber).change();
-                mod=true;
-            } else if($('input['+GetControlName('housenumber')+']').val() !== houseNumber && !(/^\d{1,6}[а-яА-Я0-9]{1,}\d{1,3}$/.test(houseNumber)))
-            {
-                if(confirm ("Изменить номер дома "+$('input['+GetControlName('housenumber')+']').val()+"->"+houseNumber+"?")) {
+                // ... допустимо только " 'цифр в количестве от 1 до 6' И_ВОЗМОЖНО ('буквы' ИЛИ '/буквы' ИЛИ '/цифры') "
+                if(/^\d{1,6}(([а-яА-Я]*)|(\/{1}(([а-яА-Я]+)|([0-9]+))))$/.test(houseNumber))
+                {
+                    // можно ставить ХН
                     $('input['+GetControlName('housenumber')+']').val(houseNumber).change();
                     mod=true;
                 }
             }
-
         }
 
         // ** обработка имени НП **
@@ -579,6 +659,7 @@ function __ModityAddressYM()
 }
 
 function getListPOI(){
+    if (wme2GIS_debug) console.log("getListPOI()");
     var building_id=this.getAttribute('building_id');
     var lonc=this.getAttribute('lon');
     var latc=this.getAttribute('lat');
@@ -659,6 +740,7 @@ function getListPOI(){
 
 
 function createPOI (poiobject) {
+    if (wme2GIS_debug) console.log("createPOI("+JSON.stringify(poiobject)+")");
     /*
         poiobject:
             x, y - координаты (2гис)
@@ -1040,14 +1122,16 @@ function WMEGetInfo2Gis_HandCreatePOI()
     if ((typeof arguments[0]) === "object")
     {
         if ((typeof (arguments[0].poiType)) === "string")
-            $('.toolbar-group-venues').find('.dropdown-menu').find('.venues-toolbar-button').eq(6).find(arguments[0].poiType).click();
+            $('.toolbar-group-venues').find('.dropdown-menu').find('.venues-toolbar-button').eq(arguments[0].poiCat).find(arguments[0].poiType).click();
     }
 }
 
 function wme_2gis_initBindPoi() {
+    if (wme2GIS_debug) console.log("wme_2gis_initBindPoi()");
     var Config =[
-        {handler: 'WMEGetInfo2Gis_Point', title: "Создать точку",        func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.point-venue'}},
-        {handler: 'WMEGetInfo2Gis_Area',  title: "Создать лэндмарк",     func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue'}}
+        {handler: 'WMEGetInfo2Gis_Point',  title: "Создать точку (другое)",    func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.point-venue',poiCat:6}},
+        {handler: 'WMEGetInfo2Gis_Area',   title: "Создать лэндмарк (другое)", func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue',poiCat:6}},
+        {handler: 'WMEGetInfo2Gis_AreaNat',title: "Создать лэндмарк (природа)",func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue',poiCat:9}},
     ];
     for(var i=0; i < Config.length; ++i)
     {
@@ -1066,6 +1150,7 @@ function wme_2gis_initBindPoi() {
 // подгрузка скриптов
 function wme_2gis_init_script(t)
 {
+     if (wme2GIS_debug) console.log("wme_2gis_init_script("+t+")");
     switch(t)
     {
         case '2gis':
@@ -1109,6 +1194,7 @@ function wme_2gis_init_script(t)
 
 //******************************************************
 function wme_2gis_init() {
+     if (wme2GIS_debug) console.log("wme_2gis_init()");
 
     wme2GIS_debug = __GetLocalStorageItem("wme2GIS_debug",'bool',false);
 
@@ -1117,8 +1203,6 @@ function wme_2gis_init() {
     wme2GIS_yamap = __GetLocalStorageItem("wme2GIS_yamap",'bool',false);
 
     wme2GIS_2gismap = __GetLocalStorageItem("wme2GIS_2gismap",'bool',false);
-
-    if (wme2GIS_debug) console.log('wme_2gis_init');
 
     if(wme2GIS_2gismap) // потом подгрузим, если что, из настроек
         wme_2gis_init_script('2gis');
@@ -1136,6 +1220,8 @@ function wme_2gis_init() {
 
 function __GetLocalStorageItem(Name,Type,Def,Arr)
 {
+     //if (wme2GIS_debug) console.log("__GetLocalStorageItem(): Name="+Name+",Type="+Type+",Def="+Def+",Arr="+Arr);
+
     var tmp0=localStorage.getItem(Name);
     if (tmp0)
     {

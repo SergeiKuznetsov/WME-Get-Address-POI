@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME getting info from 2GIS
 // @namespace    https://greasyfork.org/ru/scripts/19633-wme-getting-info-from-2gis
-// @version      0.1.7.11
+// @version      0.1.7.18
 // @description  Information from 2gis in landmark edit panel
 // @author       coilamo & skirda
 // @include      https://*.waze.com/editor/*
@@ -12,7 +12,7 @@
 // Спасибо skirda за помощь в улучшении скрипта
 // ==/UserScript==
 
-var WME_2gis_version = '0.1.7.11';
+var WME_2gis_version = '0.1.7.18';
 var wazeActionAddLandmark = require("Waze/Action/AddLandmark");
 var wazefeatureVectorLandmark = require("Waze/Feature/Vector/Landmark");
 var wazefeatureEditorLandmark = require("Waze/Modules/FeatureEditor/Landmark");
@@ -21,12 +21,13 @@ var wazeActionUpdateObject = require("Waze/Action/UpdateObject");
 
 var wme2GIS_debug=false;
 var wme2GIS_dontselect=false;
+var wme2GIS_changecat = false;
 var wme2GIS_AddAddress=false;
 var wme2GIS_UserRank=-1;
 var wme2GIS_radius=10;
 var wme2GIS_NavigationPoint=0; // размещать точки-пои рандомно, недалеко от точки входа
 var wme2GIS_HNFormat=0;
-var wme2GIS_DefCategory="PROFESSIONAL_AND_PUBLIC";
+var wme2GIS_DefCategory="OTHER";
 var wme2GIS_osmmap=false;
 var wme2GIS_yamap=false;
 var wme2GIS_2gismap=false;
@@ -124,6 +125,8 @@ function wme_2gis() {
     wme2GIS_AddAddress = __GetLocalStorageItem("wme2GIS_AddAddress",'bool',false);
 
     wme2GIS_dontselect = __GetLocalStorageItem("wme2GIS_dontselect",'bool',false);
+
+    wme2GIS_changecat = __GetLocalStorageItem("wme2GIS_changecat",'bool',false);
 
     wme2GIS_NavigationPoint = __GetLocalStorageItem("wme2GIS_NavigationPoint",'int',0);
 
@@ -364,7 +367,7 @@ function wme_2gis_InserHTML() {
 
                 if(houseNumber !== undefined && houseNumber !== null)
                 {
-                    document.getElementById('ym_storeaddress').onclick =  __ModityAddressYM;
+                    if (document.getElementById('ym_storeaddress')) document.getElementById('ym_storeaddress').onclick =  __ModityAddressYM;
                     var ym_locality = findSomething(ym_obj, "LocalityName");
                     if(typeof(ym_locality.DependentLocality) !== undefined) ym_locality = ym_locality.DependentLocality;
 
@@ -428,10 +431,13 @@ function wme_2gis_InserHTML() {
 
                 if(osm_obj.house_number !== undefined)
                 {
-                    document.getElementById('osm_storeaddress').onclick =  __ModityAddressYM;
-                    //document.getElementById('osm_storeaddress').setAttribute('cityName', gm_obj[2].long_name);
-                    document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
-                    document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
+                    if (document.getElementById('osm_storeaddress'))
+                    {
+                       document.getElementById('osm_storeaddress').onclick =  __ModityAddressYM;
+                       document.getElementById('osm_storeaddress').setAttribute('cityName', osm_obj.city);
+                       document.getElementById('osm_storeaddress').setAttribute('streetName', osm_obj.road);
+                       document.getElementById('osm_storeaddress').setAttribute('houseNumber', osm_obj.house_number);
+                    }
                 }
                 if(wme2GIS_osmmap)
                 {
@@ -510,19 +516,18 @@ function __ModityAddressYM()
         // ** обработка имени стрита **
         if(streetName && streetName !== "")
         {
-
             //блок по преобразованию имени стрита к нашему виду.
-
             var wmeStreetName;
             var streets=[];
             var i=0;
             for(i in Waze.model.streets.objects)
             {
-                if (wme2GIS_debug) console.log(Waze.model.streets.objects[i].name);
-                streets.push({"name": Waze.model.streets.objects[i].name});
+                if (wme2GIS_debug) console.log("Waze.model.streets.objects["+i+"].getAttributes().name="+Waze.model.streets.objects[i].getAttributes().name);
+                if (Waze.model.streets.objects[i].getAttributes().name)
+                    streets.push({"name": Waze.model.streets.objects[i].getAttributes().name});
             }
 
-            if (wme2GIS_debug) console.log(streets);
+            if (wme2GIS_debug) {console.log("streets:");console.log(streets);}
             var options = {
                 caseSensitive: false,
                 includeScore: false,
@@ -639,23 +644,71 @@ function __ModityAddressYM()
         }
 
         // ** обработка имени НП **
+        if (wme2GIS_debug) console.log("cityName="+cityName)
         if(cityName && cityName !== "")
         {
-            if(!$('input['+GetControlName('cityname')+']').val().length)
+            if (wme2GIS_debug) console.log("start CITYS");
+            //блок по преобразованию имени сити к нашему виду.
+            var wmeCityName;
+            var citys=[];
+            var i=0;
+            for(i in Waze.model.cities.objects)
             {
+                var name_c=Waze.model.cities.objects[i].getAttributes().name;
+                if (wme2GIS_debug) console.log("Waze.model.cities.objects["+i+"].getAttributes().name="+name_c);
+                //if (name_c)
+                    citys.push({"name": name_c});
+            }
+
+            if (wme2GIS_debug) { console.log("citys:"); console.log(citys); }
+            var options = {
+                caseSensitive: false,
+                includeScore: false,
+                shouldSort: true,
+                tokenize: true,
+                threshold: 0.6,
+                location: 0,
+                distance: 100,
+                maxPatternLength: 32,
+                keys: ["name"]
+            };
+            var f = new Fuse(citys, options);
+            wmeCityName = f.search(cityName);
+            if (wme2GIS_debug) console.log("wmeCityName[0].name="+wmeCityName[0].name);
+
+            if($('input['+GetControlName('cityname')+']').val() !== wmeCityName[0].name) {
+
                 // если чекед ("без НП") - сделать uncheck (разлочить строку ввода)
                 if ($(GetControlName('citynamecheck'))[0].checked)
                     $(GetControlName('citynamecheck')).click();
-
-                // ставить имя НП в адрес
-                $('input['+GetControlName('cityname')+']').val(cityName).change();
-                mod=true;
+                //если имя не пустое, сообщаем, что мы его меняем
+                if($('input['+GetControlName('cityname')+']').val().length) {
+                    if(confirm('Изменить НП ' + $('input['+GetControlName('cityname')+']').val() + ' -> ' + wmeCityName[0].name + '?'))
+                    {
+                        // ставим имя стрита в адрес
+                        $('input['+GetControlName('cityname')+']').val(wmeCityName[0].name).change();
+                        mod=true;
+                    }
+                }else{
+                    // ставим имя стрита в адрес
+                    $('input['+GetControlName('cityname')+']').val(wmeCityName[0].name).change();
+                    mod=true;
+                }
             }
         }
-        if (wme2GIS_debug) console.log(GetControlName('save'));
+
+        if (wme2GIS_debug) console.log("GetControlName('save')="+GetControlName('save'));
         $('button['+(mod ?GetControlName('save'):GetControlName('cancel'))+']').click();
     }, 60);
 
+    // Меняем категорию на по умолчанию
+    //console.log("$('.category').attr('data-category')="+ $('.category').attr('data-category') +", wme2GIS_DefCategory="+ wme2GIS_DefCategory +", wme2GIS_changecat="+ wme2GIS_changecat)
+    if($('.category').attr('data-category') !== "OTHER"/*wme2GIS_DefCategory*/ && wme2GIS_changecat) {
+        if(confirm('Изменить тип пои с ' + $('.category').attr('data-category') + ' на ' + "OTHER"/*wme2GIS_DefCategory*/)) {
+            $('.remove-choice').each(function(o){this.click();}); //сначала удаляем что есть
+            $('div[data-category='+"OTHER"/*wme2GIS_DefCategory*/+']').click();
+        }
+    }
 }
 
 function getListPOI(){
@@ -848,9 +901,9 @@ function createPOI (poiobject) {
             Waze.model.actionManager.add(poi_al);
             window.poi0=poi;    // для анализа :-)
             window.poi1=poi_al; // для анализа :-)
-
+            console.log(address);
             // корректировка стрита - по другому пока никак :-(
-            var newAddressAtts={streetName: address.street.name, emptyStreet: false, cityName: address.city.name, emptyCity: false, stateID: address.state.id, countryID: address.country.id};
+            var newAddressAtts={streetName: address.street.name, emptyStreet: false, cityName: address.city.attributes.name, emptyCity: false, stateID: address.state.id, countryID: address.country.id};
             Waze.model.actionManager.add(new wazeActionUpdateFeatureAddress(poi, newAddressAtts, {streetIDField: 'streetID'} ));
 
             // обеспечим автовыделение вновь созданного пои
@@ -1009,6 +1062,9 @@ function Wme2Gis_InitConfig()
                         +'<input name="wme2gis_cfg_dontselect" value="" id="wme2gis_cfg_dontselect" type="checkbox"><label for="wme2gis_cfg_dontselect" title="Не переключаться на новое POI.">&nbsp;Не выделять новое POI</label><br/>'
                         +'</div>'
                         +'<div class="controls">'
+                        +'<input name="wme2gis_cfg_changecat" value="" id="wme2gis_cfg_changecat" type="checkbox"><label for="wme2gis_cfg_changecat" title="Изменять категорию POI на категорию по умолчанию при модификации свойств POI">&nbsp;Изменять категорию</label><br/>'
+                        +'</div>'
+                        +'<div class="controls">'
                         +'<input name="wme2gis_cfg_debug" value="" id="wme2gis_cfg_debug" type="checkbox"><label for="wme2gis_cfg_debug" title="Включить логирование">&nbsp;Debug script</label><br/>'
                         +'</div>'
                         +'</div>'
@@ -1048,6 +1104,9 @@ function Wme2Gis_InitConfig()
 
             document.getElementById("wme2gis_cfg_dontselect").checked = wme2GIS_dontselect;
             document.getElementById("wme2gis_cfg_dontselect").onclick = function(){wme2GIS_dontselect=this.checked;localStorage.setItem("wme2GIS_dontselect",wme2GIS_dontselect?"1":"0");};
+
+            document.getElementById("wme2gis_cfg_changecat").checked = wme2GIS_changecat;
+            document.getElementById("wme2gis_cfg_changecat").onclick = function(){wme2GIS_changecat=this.checked;localStorage.setItem("wme2GIS_changecat",wme2GIS_changecat?"1":"0");};
 
             document.getElementById("wme2gis_cfg_UserRank").selectedIndex = wme2GIS_UserRank;
             document.getElementById("wme2gis_cfg_UserRank").onchange = function(){wme2GIS_UserRank=this.value;localStorage.setItem("wme2GIS_UserRank",wme2GIS_UserRank);};
@@ -1122,16 +1181,22 @@ function WMEGetInfo2Gis_HandCreatePOI()
     if ((typeof arguments[0]) === "object")
     {
         if ((typeof (arguments[0].poiType)) === "string")
-            $('.toolbar-group-venues').find('.dropdown-menu').find('.venues-toolbar-button').eq(arguments[0].poiCat).find(arguments[0].poiType).click();
+        {
+            if (arguments[0].poiType === "parking")
+                $('.toolbar-group-venues').find('.dropdown-menu').find('.WazeControlDrawFeature').eq(arguments[0].poiCat).click();
+            else
+                $('.toolbar-group-venues').find('.dropdown-menu').find('.drawing-controls').eq(arguments[0].poiCat).find(arguments[0].poiType).click();
+        }
     }
 }
 
 function wme_2gis_initBindPoi() {
     if (wme2GIS_debug) console.log("wme_2gis_initBindPoi()");
     var Config =[
-        {handler: 'WMEGetInfo2Gis_Point',  title: "Создать точку (другое)",    func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.point-venue',poiCat:6}},
-        {handler: 'WMEGetInfo2Gis_Area',   title: "Создать лэндмарк (другое)", func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue',poiCat:6}},
-        {handler: 'WMEGetInfo2Gis_AreaNat',title: "Создать лэндмарк (природа)",func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.area-venue',poiCat:9}},
+        {handler: 'WMEGetInfo2Gis_Point',  title: "Создать точку (другое)",    func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.point',poiCat:6}},
+        {handler: 'WMEGetInfo2Gis_Area',   title: "Создать лэндмарк (другое)", func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.polygon',poiCat:6}},
+        {handler: 'WMEGetInfo2Gis_AreaNat',title: "Создать лэндмарк (природа)",func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'.polygon',poiCat:9}},
+        {handler: 'WMEGetInfo2Gis_Parking',title: "Создать парковку",          func: WMEGetInfo2Gis_HandCreatePOI, key:-1, arg:{poiType:'parking',poiCat:10}},
     ];
     for(var i=0; i < Config.length; ++i)
     {
